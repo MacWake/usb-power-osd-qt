@@ -1,0 +1,9 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=USB-C Power OSD
+Comment=On Screen Display for USB-C power meter
+Exec=/usr/local/bin/myapp
+Icon=usbpower
+Categories=Utility;
+StartupNotify=true

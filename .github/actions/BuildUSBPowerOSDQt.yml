@@ -1,0 +1,106 @@
+name: Build USB Power OSD Qt
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            qt_target: desktop
+            cmake_preset: linux
+          - os: windows-latest
+            qt_target: desktop  
+            cmake_preset: windows
+          - os: macos-latest
+            qt_target: desktop
+            cmake_preset: macos
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.7.2'
+        target: ${{ matrix.qt_target }}
+        modules: 'qtbluetooth qtserialport'
+        
+    - name: Setup build environment (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake ninja-build libbluetooth-dev
+        
+    - name: Setup build environment (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install cmake ninja
+        
+    - name: Setup build environment (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install cmake ninja
+        
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+        
+    - name: Build
+      run: |
+        cmake --build build --config Release
+        
+    - name: Package (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        cd build
+        cpack -G DEB
+        cpack -G TGZ
+        
+    - name: Package (Windows)
+      if: runner.os == 'Windows'  
+      run: |
+        cd build
+        cpack -G NSIS
+        cpack -G ZIP
+        
+    - name: Package (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        cd build
+        cpack -G DragNDrop
+        cpack -G TGZ
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: usb-power-osd-qt-${{ matrix.os }}
+        path: build/usb-power-osd-qt-*
+        
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Upload release assets
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          usb-power-osd-qt-ubuntu-latest/*
+          usb-power-osd-qt-windows-latest/*
+          usb-power-osd-qt-macos-latest/*
