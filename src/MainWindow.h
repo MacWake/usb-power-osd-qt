@@ -1,7 +1,9 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "CurrentGraph.h"
 #include "DeviceManager.h"
+#include "MeasurementHistory.h"
 #include "OsdSettings.h"
 #include "PowerMonitor.h"
 #include "SettingsDialog.h"
@@ -16,38 +18,54 @@ class QLabel;
 class QProgressBar;
 QT_END_NAMESPACE
 
-class MainWindow : public QMainWindow
-{
-    Q_OBJECT
+class MainWindow : public QMainWindow {
+  Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
+  MainWindow(QWidget *parent = nullptr);
+  ~MainWindow();
+  void showStatusMessage(const QString &message, int hideAfterMs);
 
 private slots:
-    void onPowerDataReceived(const PowerData &data);
-    void onDeviceConnected(const QString &deviceName);
-    void onDeviceDisconnected();
-    void showSettings();
+  void onPowerDataReceived(const PowerData &data);
+  void onDeviceConnected(const QString &deviceName);
+  void onDeviceDisconnected();
+  void showSettings();
+  void updateLabels();
+  void hideStatusBar();
+  void resetMeasurementHistory();
+
+protected:
+  void resizeEvent(QResizeEvent *event) override;
+  bool eventFilter(QObject *obj, QEvent *event) override;
 
 private:
-    void setupUI();
-    void updateUI(const PowerData &data);
-    
-    PowerMonitor *m_powerMonitor;
-    DeviceManager *m_deviceManager;
-    SettingsDialog *m_settings;
-    OsdSettings *settings = nullptr;
+  void setupUI();
+  void updateUINoData();
+  void setBackgroundColor(const QColor &color);
+  void positionWidgets();
 
-    QLabel *m_statusLabel;
-    QLabel *m_voltageLabel;
-    QLabel *m_currentLabel;
-    QLabel *m_powerLabel;
-    QLabel *m_energyLabel;
-    QProgressBar *m_voltageBar;
-    QProgressBar *m_currentBar;
+  PowerMonitor *m_powerMonitor;
+  DeviceManager *m_deviceManager;
+  SettingsDialog *m_settings;
+  OsdSettings *settings = nullptr;
+  MeasurementHistory *m_history = nullptr;
 
-    QTimer *m_updateTimer;
+  QTimer *m_updateTimer;
+  QTimer *m_statusBarHideTimer;
+
+  // UI members
+  QLabel *lblVoltage;
+  QLabel *lblCurrent;
+  QLabel *lblPower;
+  QLabel *lblEnergy;
+  QLabel *lblMinMaxCurrent;
+  QFont *fntVoltage;
+  QFont *fntCurrent;
+  QFont *fntPower;
+  QFont *fntEnergy;
+
+  CurrentGraph *m_currentGraph;
 };
 
 #endif // MAINWINDOW_H

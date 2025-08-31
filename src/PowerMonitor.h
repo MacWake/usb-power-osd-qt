@@ -2,14 +2,7 @@
 #define POWERMONITOR_H
 
 #include <QObject>
-
-struct PowerData {
-    double voltage = 0.0;    // Volts
-    double current = 0.0;    // Amperes
-    double power = 0.0;      // Watts
-    double energy = 0.0;     // Watt-hours
-    quint64 timestamp = 0;   // Unix timestamp
-};
+#include "PowerData.h"
 
 class PowerMonitor : public QObject
 {

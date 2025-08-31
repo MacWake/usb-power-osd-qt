@@ -9,6 +9,7 @@
 
 #include <QSettings>
 #include <QtGui/qcolor.h>
+#include <QtWidgets/qstyle.h>
 
 class OsdSettings : public QSettings {
   Q_OBJECT
@@ -19,9 +20,11 @@ public:
   int window_left;
   int window_height;
   int window_width;
-  QString volts_amps_font;
+  QString measurements_font;
   int volts_font_size;
   int amps_font_size;
+  int power_font_size;
+  int energy_font_size;
   int graph_height;
   float min_current = 0.0;
   QColor color_bg;
@@ -44,13 +47,10 @@ public:
   void saveSettings();
 
   void loadSettings();
+
+private:
   QColor setting2Rgb(const QString &setting);
   QString rgb_to_string(const QColor &rgb);
-
-  // private:
-//   static QColor setting2Rgb(const QString &setting);
-//
-//   static QString rgb_to_string(const QColor &rgb);
 };
 
 #ifndef MAIN

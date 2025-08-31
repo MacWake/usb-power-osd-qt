@@ -287,8 +287,8 @@ void BluetoothManager::parseJsonAndEmitPowerData(const QByteArray &data)
     powerData.energy = m_energyAccumulator;
     m_lastTimestamp = powerData.timestamp;
     
-    qDebug() << "Parsed BLE data - V:" << powerData.voltage << "A:" << powerData.current 
-             << "W:" << powerData.power << "E:" << powerData.energy;
+    // qDebug() << "Parsed BLE data - V:" << powerData.voltage << "A:" << powerData.current
+    //          << "W:" << powerData.power << "E:" << powerData.energy;
     
     emit powerDataReceived(powerData);
 }

@@ -23,6 +23,7 @@ set(CMAKE_AUTOUIC ON)
 set(SOURCES
         src/Main.cpp
         src/MainWindow.cpp
+        src/CurrentGraph.cpp
         src/PowerMonitor.cpp
         src/BluetoothManager.cpp
         src/SerialManager.cpp
@@ -30,10 +31,13 @@ set(SOURCES
         src/OsdSettings.cpp
         src/SettingsDialog.cpp
         src/PowerDelivery.cpp
+        src/MeasurementHistory.cpp
+        src/CurrentGraph.cpp
 )
 
 set(HEADERS
         src/MainWindow.h
+        src/CurrentGraph.h
         src/PowerMonitor.h
         src/BluetoothManager.h
         src/SerialManager.h
@@ -41,6 +45,8 @@ set(HEADERS
         src/OsdSettings.h
         src/SettingsDialog.h
         src/PowerDelivery.h
+        src/PowerData.h
+        src/MeasurementHistory.h
 )
 
 set(UI_FILES
@@ -81,7 +87,7 @@ if (APPLE)
 endif ()
 
 # Finalize the executable (this replaces qt_finalize_executable)
-qt6_finalize_target(usb-power-osd)
+# qt6_finalize_target(usb-power-osd)
 
 # Install
 install(TARGETS usb-power-osd

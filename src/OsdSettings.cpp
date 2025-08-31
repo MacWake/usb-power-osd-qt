@@ -1,8 +1,10 @@
 #include "OsdSettings.h"
+
 #include "MainWindow.h"
 #include "SettingsDialog.h"
 
 #include <QApplication>
+#include <QStyleFactory>
 #include <QtGui/qscreen.h>
 #include <iostream>
 #include <sstream>
@@ -25,11 +27,11 @@ void OsdSettings::init() {
   volts_font_size = amps_font_size =
       static_cast<int>(static_cast<double>(24) * scale);
 #if TARGET_OS_OSX
-  volts_amps_font = "Monaco";
+  measurements_font = "Monaco";
 #elif TARGET_OS_WINDOWS
-  volts_amps_font = "Arial";
+  measurements_font = "Arial";
 #else
-  volts_amps_font = "Roboto Mono";
+  measurements_font = "Roboto Mono";
 #endif
   graph_height = 150;
   color_bg = QColor(0, 0, 0);
@@ -87,7 +89,7 @@ void OsdSettings::saveSettings() {
   setValue("window/height", this->window_height);
   setValue("window/width", this->window_width);
   setValue("window/graph_height", this->graph_height);
-  setValue("measurement/font", this->volts_amps_font);
+  setValue("measurement/font", this->measurements_font);
   setValue("measurement/volts_font_size", this->volts_font_size);
   setValue("measurement/amps_font_size", this->amps_font_size);
   setValue("measurement/min_current", this->min_current);
@@ -114,8 +116,8 @@ void OsdSettings::loadSettings() {
   this->window_height = value("window/height", this->window_height).toInt();
   this->window_width = value("window/width", this->window_width).toInt();
   this->graph_height = value("window/graph_height", this->graph_height).toInt();
-  this->volts_amps_font =
-      value("measurement/font", this->volts_amps_font).toString();
+  this->measurements_font =
+      value("measurement/font", this->measurements_font).toString();
   this->volts_font_size =
       value("measurement/volts_font_size", this->volts_font_size).toInt();
   this->amps_font_size =
