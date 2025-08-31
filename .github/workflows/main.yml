@@ -1,0 +1,157 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-22.04, macos-latest, windows-cross ]
+        build_type: [ Release ]
+        include:
+          - os: windows-cross
+            generator: "Unix Makefiles"
+            runs-on: ubuntu-latest
+          - os: ubuntu-22.04
+            generator: "Unix Makefiles"
+          - os: macos-latest
+            generator: "Unix Makefiles"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Install Qt for all platforms
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.0'
+          host: ${{ matrix.os == 'windows-cross' && 'windows' || matrix.os == 'macos-latest' && 'mac' || 'linux' }}
+          target: 'desktop'
+          arch: ${{ matrix.os == 'windows-cross' && 'win64_msvc2019_64' || matrix.os == 'macos-latest' && 'clang_64' || 'gcc_64' }}
+          modules: 'qtserialport'
+          setup-python: true
+
+      # Install additional Linux dependencies if needed
+      - name: Install additional Linux dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0
+
+      - name: Install MinGW and dependencies
+        if: matrix.os == 'windows-cross'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 cmake zip
+
+      # macOS code signing setup
+      - name: Import Code-Signing Certificates
+        if: matrix.os == 'macos-latest'
+        uses: Apple-Actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          keychain-password: ${{ github.run_id }}
+
+      - name: Configure CMake for Windows
+        if: matrix.os == 'windows-cross'
+        run: |
+          cmake -B ${{github.workspace}}/build \
+          -G "Unix Makefiles" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_SYSTEM_NAME=Windows \
+          -DCMAKE_CROSSCOMPILING=TRUE \
+          -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+          -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+          -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
+          -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++ -static" \
+          -DCMAKE_CXX_FLAGS="-DSTATIC_BUILD"
+
+      - name: Configure CMake (non-Windows)
+        if: matrix.os != 'windows-cross'
+        run: >
+          cmake -B ${{github.workspace}}/build 
+          -G "${{matrix.generator}}" 
+          -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
+          -DCMAKE_PREFIX_PATH=${{env.Qt6_DIR}}
+          ${{ matrix.os == 'macos-latest' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
+
+      - name: Build
+        run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+
+      # After the build step but before code signing, add:
+      - name: Deploy and Sign Qt dependencies
+        if: matrix.os == 'macos-latest'
+        run: |
+          echo "Deploying and signing Qt frameworks to app bundle"
+          macdeployqt "${{github.workspace}}/build/USB Power OSD.app" -always-overwrite -verbose=2 -sign-for-notarization="Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
+
+      # macOS code signing
+      - name: Sign the macOS application
+        if: matrix.os == 'macos-latest'
+        run: |
+          echo "Signing with Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
+
+      # macOS notarization (optional but recommended)
+      - name: Notarize the macOS application
+        if: matrix.os == 'macos-latest'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        run: |
+          # Create a ZIP archive of the app
+          ditto -c -k --keepParent "${{github.workspace}}/build/USB Power OSD.app" "${{github.workspace}}/build/USB Power OSD.zip"
+          
+          # Notarize the app
+          xcrun notarytool submit "${{github.workspace}}/build/USB Power OSD.zip" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "${{ vars.APPLE_TEAM_ID }}" \
+            --wait
+          
+          # Staple the notarization ticket
+          xcrun stapler staple "${{github.workspace}}/build/USB Power OSD.app"
+
+      - name: Upload Windows artifacts
+        if: matrix.os == 'windows-cross'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: ${{github.workspace}}/build/Release/USB Power OSD.exe
+          if-no-files-found: error
+
+      - name: Upload macOS artifacts
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: ${{github.workspace}}/build/USB Power OSD.app
+          if-no-files-found: error
+
+      # For Linux
+      - name: Debug build output
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          echo "Listing build directory contents:"
+          ls -la ${{github.workspace}}/build/
+          echo "Finding executable by name:"
+          find ${{github.workspace}}/build -name "USB*" -type f -executable
+
+      - name: Upload Linux artifacts
+        if: matrix.os == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: ${{github.workspace}}/build/USB Power OSD
+          if-no-files-found: error
