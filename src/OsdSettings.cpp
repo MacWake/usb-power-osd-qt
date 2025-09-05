@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QStyleFactory>
 #include <QtGui/qscreen.h>
+#include <QDebug>
 #include <iostream>
 #include <sstream>
 
@@ -125,34 +126,34 @@ void OsdSettings::loadSettings() {
       value("measurement/amps_font_size", this->amps_font_size).toInt();
   this->min_current =
       value("measurement/min_current", this->min_current).toFloat();
-  QString color_string;
-  if (value("colors/background", color_string).toString() != "") {
-    this->color_bg = setting2Rgb(color_string);
-  }
-  if (value("colors/amps", color_string).toString() != "") {
-    this->color_amps = setting2Rgb(color_string);
-  }
-  if (value("colors/5v", color_string).toString() != "") {
-    this->color_5v = setting2Rgb(color_string);
-  }
-  if (value("colors/9v", color_string).toString() != "") {
-    this->color_9v = setting2Rgb(color_string);
-  }
-  if (value("colors/15v", color_string).toString() != "") {
-    this->color_15v = setting2Rgb(color_string);
-  }
-  if (value("colors/20v", color_string).toString() != "") {
-    this->color_20v = setting2Rgb(color_string);
-  }
-  if (value("colors/28v", color_string).toString() != "") {
-    this->color_28v = setting2Rgb(color_string);
-  }
-  if (value("colors/36v", color_string).toString() != "") {
-    this->color_36v = setting2Rgb(color_string);
-  }
-  if (value("colors/48v", color_string).toString() != "") {
-    this->color_48v = setting2Rgb(color_string);
-  }
+  // QString color_string;
+  // if ((color_string = value("colors/background", rgb_to_string(this->color_bg)).toString()) != "") {
+  //   this->color_bg = setting2Rgb(color_string);
+  // }
+  // if ((color_string = value("colors/amps", rgb_to_string(this->color_amps)).toString()) != "") {
+  //   this->color_amps = setting2Rgb(color_string);
+  // }
+  // if ((color_string = value("colors/5v", rgb_to_string(this->color_5v)).toString()) != "") {
+  //   this->color_5v = setting2Rgb(color_string);
+  // }
+  // if ((color_string = value("colors/9v", rgb_to_string(this->color_9v)).toString()) != "") {
+  //   this->color_9v = setting2Rgb(color_string);
+  // }
+  // if ((color_string = value("colors/15v", rgb_to_string(this->color_15v)).toString()) != "") {
+  //   this->color_15v = setting2Rgb(color_string);
+  // }
+  // if ((color_string = value("colors/20v", rgb_to_string(this->color_20v)).toString()) != "") {
+  //   this->color_20v = setting2Rgb(color_string);
+  // }
+  // if ((color_string = value("colors/28v", rgb_to_string(this->color_28v)).toString()) != "") {
+  //   this->color_28v = setting2Rgb(color_string);
+  // }
+  // if ((color_string = value("colors/36v", rgb_to_string(this->color_36v)).toString()) != "") {
+  //   this->color_36v = setting2Rgb(color_string);
+  // }
+  // if ((color_string = value("colors/48v", rgb_to_string(this->color_48v)).toString()) != "") {
+  //   this->color_48v = setting2Rgb(color_string);
+  // }
   this->last_device = value("device/last", this->last_device).toString();
 }
 
@@ -169,6 +170,7 @@ QColor OsdSettings::setting2Rgb(const QString &setting) {
   if (values.size() >= 3) {
     return {values[0], values[1], values[2]};
   }
+  qDebug() << "Invalid color setting: " << setting;
   return {}; // Invalid color
 }
 

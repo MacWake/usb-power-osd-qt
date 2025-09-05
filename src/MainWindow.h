@@ -8,7 +8,6 @@
 #include "PowerMonitor.h"
 #include "SettingsDialog.h"
 #include "DeviceSelectionDialog.h"
-#include <QAction>
 #include <QMainWindow>
 #include <QMenu>
 #include <QSystemTrayIcon>
@@ -23,9 +22,12 @@ class MainWindow : public QMainWindow {
   Q_OBJECT
 
 public:
-  MainWindow(QWidget *parent = nullptr);
-  ~MainWindow();
+  explicit MainWindow(QWidget *parent = nullptr);
+  ~MainWindow() override;
   void showStatusMessage(const QString &message, int hideAfterMs);
+  
+  // Public getter for settings
+  [[nodiscard]] OsdSettings* getSettings() const { return settings; }
 
 private slots:
   void onPowerDataReceived(const PowerData &data);
@@ -50,7 +52,7 @@ private:
 
   PowerMonitor *m_powerMonitor;
   DeviceManager *m_deviceManager;
-  SettingsDialog *m_settings;
+  SettingsDialog *m_settingsdialog;
   OsdSettings *settings = nullptr;
   MeasurementHistory *m_history = nullptr;
   DeviceSelectionDialog *m_deviceSelectionDialog;

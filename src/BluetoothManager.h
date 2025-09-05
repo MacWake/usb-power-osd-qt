@@ -8,7 +8,7 @@
 #include <QLowEnergyService>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include "PowerMonitor.h"  // For PowerData struct
+#include "PowerMonitor.h"
 
 QT_FORWARD_DECLARE_CLASS(QTimer)
 

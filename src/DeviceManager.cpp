@@ -38,27 +38,24 @@ DeviceManager::DeviceManager(QObject *parent)
 
 void DeviceManager::startScanning() {
   m_bluetoothManager->startScanning();
-  m_serialManager->startScanning();
+  // m_serialManager->startScanning();
 }
 
 void DeviceManager::stopScanning() {
   m_bluetoothManager->stopScanning();
-  m_serialManager->stopScanning();
+  // m_serialManager->stopScanning();
 }
 
-void DeviceManager::requestPowerData() {
-  if (m_isBluetoothConnected) {
-    m_bluetoothManager->requestData();
-  } else if (m_isSerialConnected) {
-    m_serialManager->requestData();
-  }
-}
 bool DeviceManager::tryConnect(const QString &portName) {
+  qDebug() << "DeviceManager::tryConnect: Trying to connect to " << portName;
   if (portName.startsWith("ble")) {
     m_bluetoothManager->startScanning();
-  } else if (portName.startsWith("/dev") || portName.startsWith("COM")) {
+  } else if (portName.toLower().contains("usb") || portName.startsWith("COM")) {
     QSerialPortInfo serialPortInfo(portName);
-    return m_serialManager->connectToDevice(serialPortInfo);
+    return m_serialManager->connectSerialDevice(serialPortInfo);
+  } else {
+    qDebug() << "DeviceManager::tryConnect: Unknown port type: " << portName;
+    return false;
   }
   return false;
 }
@@ -77,6 +74,8 @@ void DeviceManager::onBluetoothDeviceDisconnected() {
 
 void DeviceManager::onSerialDeviceConnected(const QString &deviceName) {
   m_isSerialConnected = true;
+  this->m_settings->last_device = deviceName;
+  this->m_settings->saveSettings();
   emit deviceConnected(deviceName + " (Serial)");
 }
 
@@ -93,7 +92,6 @@ void DeviceManager::onBluetoothDataReceived(const QByteArray &data) {
   // qDebug() << "Raw Bluetooth data received:" << data;
 }
 
-void DeviceManager::onSerialDataReceived(const QByteArray &data) {
-  // Serial data still goes through PowerMonitor for parsing
-  m_powerMonitor->processSerialData(data);
+void DeviceManager::onSerialDataReceived(PowerData data) {
+  emit powerDataReceived(data);
 }

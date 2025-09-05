@@ -1,6 +1,8 @@
 #ifndef SERIALMANAGER_H
 #define SERIALMANAGER_H
 
+#include "PowerData.h"
+
 #include <QObject>
 #include <QSerialPort>
 #include <QSerialPortInfo>
@@ -18,26 +20,22 @@ class SerialManager : public QObject
 
 public:
     explicit SerialManager(QObject *parent = nullptr);
-    ~SerialManager();
+    ~SerialManager() override;
     
-    void startScanning();
-    void stopScanning();
-    void requestData();
+    bool connectSerialDevice(const QSerialPortInfo &portInfo);
 
 signals:
     void deviceConnected(const QString &deviceName);
     void deviceDisconnected();
-    void dataReceived(const QByteArray &data);
-    bool connectToDevice(const QSerialPortInfo &portInfo);
+    void dataReceived(PowerData data);
 
 private slots:
     void onSerialDataReady();
     void onSerialError(QSerialPort::SerialPortError error);
-    void scanForDevices();
     bool tryConnect(const QString &portName);
+    bool waitForLineAvailable(int timeoutMs);
 
   private:
-    bool isTargetDevice(const QSerialPortInfo &portInfo);
     // must set m_protocol and return true on success
     bool checkPLDProtocol();
     // must set m_protocol and return true on success

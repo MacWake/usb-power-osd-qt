@@ -54,9 +54,4 @@ private:
   static QString rgb_to_string(const QColor &rgb);
 };
 
-#ifndef MAIN
-extern
-#endif
-    OsdSettings settings;
-
 #endif // SETTINGS_H

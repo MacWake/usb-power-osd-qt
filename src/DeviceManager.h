@@ -2,42 +2,43 @@
 #define DEVICEMANAGER_H
 
 #include "BluetoothManager.h"
-#include "SerialManager.h"
+#include "OsdSettings.h"
 #include "PowerMonitor.h"
+#include "SerialManager.h"
 #include <QObject>
 
-class DeviceManager : public QObject
-{
-    Q_OBJECT
+class DeviceManager : public QObject {
+  Q_OBJECT
 
 public:
-    explicit DeviceManager(QObject *parent = nullptr);
-    
-    void startScanning();
-    void stopScanning();
-    void requestPowerData();
-    bool tryConnect(const QString &portName);
+  explicit DeviceManager(QObject *parent = nullptr);
+
+  void startScanning();
+  void stopScanning();
+  bool tryConnect(const QString &portName);
+  void setSettings(OsdSettings *settings) { m_settings = settings; }
 
 signals:
-    void deviceConnected(const QString &deviceName);
-    void deviceDisconnected();
-    void powerDataReceived(const PowerData &powerData);  // Add this signal
+  void deviceConnected(const QString &deviceName);
+  void deviceDisconnected();
+  void powerDataReceived(const PowerData &powerData); // Add this signal
 
 private slots:
-    void onBluetoothDeviceConnected(const QString &deviceName);
-    void onBluetoothDeviceDisconnected();
-    void onBluetoothDataReceived(const QByteArray &data);
-    void onSerialDeviceConnected(const QString &deviceName);
-    void onSerialDeviceDisconnected();
-    void onSerialDataReceived(const QByteArray &data);
+  void onBluetoothDeviceConnected(const QString &deviceName);
+  void onBluetoothDeviceDisconnected();
+  void onBluetoothDataReceived(const QByteArray &data);
+  void onSerialDeviceConnected(const QString &deviceName);
+  void onSerialDeviceDisconnected();
+  void onSerialDataReceived(PowerData data);
 
 private:
-    BluetoothManager *m_bluetoothManager;
-    SerialManager *m_serialManager;
-    PowerMonitor *m_powerMonitor;
-    
-    bool m_isBluetoothConnected = false;
-    bool m_isSerialConnected = false;
+  BluetoothManager *m_bluetoothManager;
+  SerialManager *m_serialManager;
+  PowerMonitor *m_powerMonitor;
+  OsdSettings *m_settings = nullptr;
+
+  bool m_isBluetoothConnected = false;
+  bool m_isSerialConnected = false;
 };
 
 #endif // DEVICEMANAGER_H
