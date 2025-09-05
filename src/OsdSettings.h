@@ -46,17 +46,9 @@ public:
   QColor voltsRgb(PowerDelivery::PD_VOLTS volts) const;
 
   void saveSettings();
+  QColor colorValue(const QString &key, QColor default_color);
 
   void loadSettings();
-
-private:
-  static QColor setting2Rgb(const QString &setting);
-  static QString rgb_to_string(const QColor &rgb);
 };
-
-#ifndef MAIN
-extern
-#endif
-    OsdSettings settings;
 
 #endif // SETTINGS_H

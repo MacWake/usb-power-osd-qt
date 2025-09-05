@@ -21,7 +21,7 @@ void PowerMonitor::processSerialData(const QByteArray &data)
 void PowerMonitor::parseV2BLEPacket(const QByteArray &data)
 {
     if (data.size() < 12) { // Minimum expected packet size
-        qDebug() << "Invalid packet size:" << data.size();
+        //qDebug() << "Invalid packet size:" << data.size();
         return;
     }
     

@@ -21,32 +21,33 @@ set(CMAKE_AUTOUIC ON)
 
 # Source files
 set(SOURCES
+        src/BluetoothManager.cpp
+        src/CurrentGraph.cpp
+        src/DeviceManager.cpp
+        src/DeviceSelectionDialog.cpp
         src/Main.cpp
         src/MainWindow.cpp
-        src/CurrentGraph.cpp
-        src/PowerMonitor.cpp
-        src/BluetoothManager.cpp
-        src/SerialManager.cpp
-        src/DeviceManager.cpp
-        src/OsdSettings.cpp
-        src/SettingsDialog.cpp
-        src/PowerDelivery.cpp
         src/MeasurementHistory.cpp
-        src/CurrentGraph.cpp
+        src/OsdSettings.cpp
+        src/PowerDelivery.cpp
+        src/PowerMonitor.cpp
+        src/SerialManager.cpp
+        src/SettingsDialog.cpp
 )
 
 set(HEADERS
-        src/MainWindow.h
-        src/CurrentGraph.h
-        src/PowerMonitor.h
         src/BluetoothManager.h
-        src/SerialManager.h
+        src/CurrentGraph.h
         src/DeviceManager.h
-        src/OsdSettings.h
-        src/SettingsDialog.h
-        src/PowerDelivery.h
-        src/PowerData.h
+        src/DeviceSelectionDialog.h
+        src/MainWindow.h
         src/MeasurementHistory.h
+        src/OsdSettings.h
+        src/PowerData.h
+        src/PowerDelivery.h
+        src/PowerMonitor.h
+        src/SerialManager.h
+        src/SettingsDialog.h
 )
 
 set(UI_FILES

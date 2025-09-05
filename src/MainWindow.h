@@ -3,12 +3,11 @@
 
 #include "CurrentGraph.h"
 #include "DeviceManager.h"
+#include "DeviceSelectionDialog.h"
 #include "MeasurementHistory.h"
 #include "OsdSettings.h"
 #include "PowerMonitor.h"
 #include "SettingsDialog.h"
-#include "DeviceSelectionDialog.h"
-#include <QAction>
 #include <QMainWindow>
 #include <QMenu>
 #include <QSystemTrayIcon>
@@ -23,9 +22,14 @@ class MainWindow : public QMainWindow {
   Q_OBJECT
 
 public:
-  MainWindow(QWidget *parent = nullptr);
-  ~MainWindow();
+  void tryConnectLastDevice();
+  explicit MainWindow(QWidget *parent = nullptr);
+  ~MainWindow() override;
+  void startReconnectTimer();
   void showStatusMessage(const QString &message, int hideAfterMs);
+
+  // Public getter for settings
+  [[nodiscard]] OsdSettings *getSettings() const { return settings; }
 
 private slots:
   void onPowerDataReceived(const PowerData &data);
@@ -34,7 +38,7 @@ private slots:
   void showSettings();
   void updateLabels();
   void hideStatusBar();
-  void connectLastDevice();
+  void connectLastDevice(bool reconnecting);
   void showDeviceSelectionDialog();
   void resetMeasurementHistory();
 
@@ -50,7 +54,7 @@ private:
 
   PowerMonitor *m_powerMonitor;
   DeviceManager *m_deviceManager;
-  SettingsDialog *m_settings;
+  SettingsDialog *m_settingsdialog;
   OsdSettings *settings = nullptr;
   MeasurementHistory *m_history = nullptr;
   DeviceSelectionDialog *m_deviceSelectionDialog;
@@ -70,6 +74,7 @@ private:
   QFont *fntEnergy;
 
   CurrentGraph *m_currentGraph;
+  QTimer *m_reconnect_timer;
 };
 
 #endif // MAINWINDOW_H

@@ -11,10 +11,9 @@
 MainWindow::MainWindow(QWidget *parent) // NOLINT(*-pro-type-member-init)
     : QMainWindow(parent), m_powerMonitor(new PowerMonitor(this)),
       m_deviceManager(new DeviceManager(this)),
-      m_settings(new SettingsDialog(this)),
+      m_settingsdialog(new SettingsDialog(this)),
       m_history(new MeasurementHistory(1000)), // todo change hard coded value
-      m_updateTimer(new QTimer(this)),
-      m_statusBarHideTimer(new QTimer(this)),
+      m_updateTimer(new QTimer(this)), m_statusBarHideTimer(new QTimer(this)),
       m_deviceSelectionDialog(nullptr)
 
 {
@@ -23,6 +22,7 @@ MainWindow::MainWindow(QWidget *parent) // NOLINT(*-pro-type-member-init)
     this->settings->init();
     this->m_currentGraph = new CurrentGraph(this, m_history, settings);
   }
+  this->m_deviceManager->setSettings(settings);
   statusBar()->setVisible(false);
 
   if (MainWindow::settings->window_width > 0 &&
@@ -49,19 +49,21 @@ MainWindow::MainWindow(QWidget *parent) // NOLINT(*-pro-type-member-init)
   connect(m_statusBarHideTimer, &QTimer::timeout, this,
           &MainWindow::hideStatusBar);
 
-  // Check if last device is available, show selection dialog if not
-  if (!DeviceSelectionDialog::isLastDeviceAvailable()) {
-    // Use a timer to show the dialog after the main window is fully initialized
-    QTimer::singleShot(100, this, &MainWindow::connectLastDevice);
-  } else {
-    // Start scanning with last known device settings
-    m_deviceManager->startScanning();
-    statusBar()->showMessage("Scanning for USB Power devices...");
-  }
+  QTimer::singleShot(100, [this] { MainWindow::connectLastDevice(false); });
+
+  this->m_reconnect_timer = new QTimer(this);
+  this->m_reconnect_timer->setInterval(1000);
+  connect(this->m_reconnect_timer, &QTimer::timeout,
+          [this] { this->connectLastDevice(true); });
+  // } else {
+  //   // Start scanning with last known device settings
+  //   m_deviceManager->startScanning();
+  //   statusBar()->showMessage("Scanning for USB Power devices...");
+  // }
 }
 
 MainWindow::~MainWindow() = default;
-
+void MainWindow::startReconnectTimer() { this->m_reconnect_timer->start(); }
 void MainWindow::showStatusMessage(const QString &message,
                                    int hideAfterMs = 5000) {
   statusBar()->setVisible(true);
@@ -77,74 +79,82 @@ void MainWindow::showStatusMessage(const QString &message,
 }
 void MainWindow::hideStatusBar() {
   statusBar()->setVisible(false);
-  
+
   // Force the central widget to use the full available space
   if (centralWidget()) {
     // Get the current window size
     QSize windowSize = size();
-    
+
     // Calculate the new geometry for the central widget
     // (accounting for menu bar but not status bar)
     int menuBarHeight = menuBar()->isVisible() ? menuBar()->height() : 0;
-    QRect newGeometry(0, menuBarHeight, windowSize.width(), 
-                     windowSize.height() - menuBarHeight);
-    
+    QRect newGeometry(0, menuBarHeight, windowSize.width(),
+                      windowSize.height() - menuBarHeight);
+
     centralWidget()->setGeometry(newGeometry);
-    
+
     // Now reposition our widgets within the expanded central widget
     positionWidgets();
   }
 }
 
-void MainWindow::connectLastDevice()
-{
+void MainWindow::connectLastDevice(bool reconnecting = false) {
+  //qDebug() << "Trying to connect to last device...";
   if (!settings->last_device.isEmpty()) {
-    this->m_deviceManager->tryConnect(settings->last_device);
-  }
-  if (!m_deviceSelectionDialog) {
-    m_deviceSelectionDialog = new DeviceSelectionDialog(this);
-  }
-  
-  if (m_deviceSelectionDialog->exec() == QDialog::Accepted) {
-    auto connectionType = m_deviceSelectionDialog->getSelectedConnectionType();
-    
-    if (connectionType == DeviceSelectionDialog::ConnectionType::BluetoothAuto) {
-      statusBar()->showMessage("Scanning for Bluetooth devices...");
-      m_deviceManager->startScanning();
-    } else if (connectionType == DeviceSelectionDialog::ConnectionType::SerialPort) {
-      QString selectedPort = m_deviceSelectionDialog->getSelectedSerialPort();
-      statusBar()->showMessage(QString("Connecting to %1...").arg(selectedPort));
-      m_deviceManager->startScanning();
+    if (this->m_deviceManager->tryConnect(settings->last_device)) {
+      //qDebug() << "Connected to last device " << settings->last_device;
+      if (reconnecting) {
+        this->m_reconnect_timer->stop();
+      }
+      return;
+    } else {
+      //qDebug() << "Failed to connect to last device " << settings->last_device;
     }
   } else {
-    // User cancelled - exit application
-    statusBar()->showMessage("No device selected. Exiting...");
-    QTimer::singleShot(2000, QApplication::instance(), &QApplication::quit);
+    //qDebug() << "No last device found";
+  }
+  if (!reconnecting) {
+    this->showDeviceSelectionDialog();
   }
 }
 
-void MainWindow::showDeviceSelectionDialog()
-{
+void MainWindow::showDeviceSelectionDialog() {
   if (!m_deviceSelectionDialog) {
     m_deviceSelectionDialog = new DeviceSelectionDialog(this);
   }
 
   if (m_deviceSelectionDialog->exec() == QDialog::Accepted) {
+    //qDebug() << "Accepted DeviceSelectionDialog";
     auto connectionType = m_deviceSelectionDialog->getSelectedConnectionType();
 
-    if (connectionType == DeviceSelectionDialog::ConnectionType::BluetoothAuto) {
+    //qDebug() << "Selected connection type: " << static_cast<int>(connectionType);
+    if (connectionType ==
+        DeviceSelectionDialog::ConnectionType::BluetoothAuto) {
+      //qDebug() << "Bluetooth auto discovery is enabled";
+
       statusBar()->showMessage("Scanning for Bluetooth devices...");
       m_deviceManager->startScanning();
-    } else if (connectionType == DeviceSelectionDialog::ConnectionType::SerialPort) {
+    } else if (connectionType ==
+               DeviceSelectionDialog::ConnectionType::SerialPort) {
       QString selectedPort = m_deviceSelectionDialog->getSelectedSerialPort();
-      statusBar()->showMessage(QString("Connecting to %1...").arg(selectedPort));
-      m_deviceManager->startScanning();
+      //qDebug() << "Selected serial port: " << selectedPort;
+      statusBar()->showMessage(
+          QString("Connecting to %1...").arg(selectedPort));
+      if (!m_deviceManager->tryConnect(selectedPort)) {
+        statusBar()->showMessage("Failed to connect to " + selectedPort);
+      } else {
+        return;
+      }
+    } else {
+      //qDebug() << "No connection type selected";
+      return;
     }
   } else {
-    // User cancelled - exit application
-    statusBar()->showMessage("No device selected. Exiting...");
-    QTimer::singleShot(2000, QApplication::instance(), &QApplication::quit);
+    // User cancelled
+    statusBar()->showMessage("No device selected.");
+    // QTimer::singleShot(2000, QApplication::instance(), &QApplication::quit);
   }
+  QTimer::singleShot(100, [this] { MainWindow::connectLastDevice(false); });
 }
 
 // ReSharper disable CppDFAMemoryLeak
@@ -171,15 +181,15 @@ void MainWindow::setupUI() {
   this->lblEnergy->setFont(*fntEnergy);
   this->lblMinMaxCurrent->setFont(*fntPower);
 
-  QColor color(255 - settings->color_bg.red(),
-                       255 - settings->color_bg.green(),
-                       255 - settings->color_bg.blue());
-  this->statusBar()->setStyleSheet("color: " + color.name() + ";");
+  QColor color(255 - settings->color_bg.red(), 255 - settings->color_bg.green(),
+               255 - settings->color_bg.blue());
+  // this->statusBar()->setStyleSheet("color: " + color.name() + ";");
   this->lblVoltage->setStyleSheet("QLabel { color: " + color.name() + "; }");
   this->lblCurrent->setStyleSheet("QLabel { color: " + color.name() + "; }");
   this->lblPower->setStyleSheet("QLabel { color: " + color.name() + "; }");
   this->lblEnergy->setStyleSheet("QLabel { color: " + color.name() + "; }");
-  this->lblMinMaxCurrent->setStyleSheet( "QLabel { color: " + color.name() + "; }");
+  this->lblMinMaxCurrent->setStyleSheet("QLabel { color: " + color.name() +
+                                        "; }");
 
   this->lblVoltage->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
   this->lblCurrent->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -190,7 +200,6 @@ void MainWindow::setupUI() {
   this->lblMinMaxCurrent->installEventFilter(this);
   this->lblMinMaxCurrent->setCursor(Qt::PointingHandCursor);
   this->lblMinMaxCurrent->setToolTip("Double-click to reset min/max history");
-
 
   // Create central widget without layout - we'll position manually
   auto *centralWidget = new QWidget;
@@ -208,7 +217,8 @@ void MainWindow::setupUI() {
   auto *fileMenu = menuBar()->addMenu("&File");
   fileMenu->addAction("&Settings", this, &MainWindow::showSettings);
   fileMenu->addSeparator();
-  fileMenu->addAction("&Change Device", this, &MainWindow::showDeviceSelectionDialog);
+  fileMenu->addAction("&Change Device", this,
+                      &MainWindow::showDeviceSelectionDialog);
   fileMenu->addSeparator();
   fileMenu->addAction("E&xit", this, &QWidget::close);
 
@@ -248,7 +258,8 @@ void MainWindow::positionWidgets() {
                      lblCurrent->fontMetrics().height() + 10);
 
   // Second row - power, energy, min/max current
-  const int secondRowY = topY + lblVoltage->height() + labelSpacing + lineSpacing;
+  const int secondRowY =
+      topY + lblVoltage->height() + labelSpacing + lineSpacing;
 
   lblPower->move(leftColumnX, secondRowY);
   lblPower->resize(smallWidth, smallHeight);
@@ -279,12 +290,20 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
 }
 
 void MainWindow::onPowerDataReceived(const PowerData &data) {
-  if (data.current > 0.001 && data.voltage > 4.0)
+  static bool lastWasInvalid = false;
+  if (data.current < settings->min_current || data.voltage < 2.0) {
+    if (!lastWasInvalid) {
+      this->m_history->push(data);
+      lastWasInvalid = true;
+    }
+  } else {
+    lastWasInvalid = false;
     this->m_history->push(data);
+  }
 }
 
 void MainWindow::onDeviceConnected(const QString &deviceName) {
-  showStatusMessage("Connected to " + deviceName + "; starting timer");
+  showStatusMessage("Connected to " + deviceName);
   m_updateTimer->start();
 }
 
@@ -294,7 +313,7 @@ void MainWindow::onDeviceDisconnected() {
   updateUINoData();
 }
 
-void MainWindow::showSettings() { m_settings->show(); }
+void MainWindow::showSettings() { m_settingsdialog->show(); }
 
 void MainWindow::updateLabels() {
 
@@ -336,10 +355,9 @@ void MainWindow::updateUINoData() {
 }
 
 void MainWindow::setBackgroundColor(const QColor &color) {
-  setStyleSheet(QString("* { background-color: %1; }"
-            "QToolTip { background-color: %2; color: %3; }"
-).arg(color.name(), color.name()).arg((color.lightness() > 128) ? Qt::black : Qt::white
-));
+  // Only set background for the main window itself, not children
+  setStyleSheet(
+      QString("MainWindow { background-color: %1; }").arg(color.name()));
 }
 
 void MainWindow::resetMeasurementHistory() {
@@ -354,7 +372,7 @@ void MainWindow::resetMeasurementHistory() {
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
   if (obj == lblMinMaxCurrent && event->type() == QEvent::MouseButtonDblClick) {
-    auto mouseEvent = dynamic_cast<QMouseEvent*>(event);
+    auto mouseEvent = dynamic_cast<QMouseEvent *>(event);
     if (mouseEvent->button() == Qt::LeftButton) {
       resetMeasurementHistory();
       return true; // Event handled

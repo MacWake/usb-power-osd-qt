@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QSerialPortInfo>
 #include <QSettings>
 #include <QStyle>
@@ -12,6 +13,7 @@ DeviceSelectionDialog::DeviceSelectionDialog(QWidget *parent)
     : QDialog(parent)
     , m_selectedType(ConnectionType::None)
 {
+    m_parent = static_cast<MainWindow *>(parent);
     setWindowTitle("Select Connection Method");
     setModal(true);
     setFixedSize(450, 280);
@@ -113,7 +115,9 @@ void DeviceSelectionDialog::setupUI()
     m_mainLayout->addLayout(m_buttonLayout);
     
     // Connect signals
-    connect(m_connectionTypeGroup, QOverload<int>::of(&QButtonGroup::buttonClicked),
+    connect(m_bluetoothRadio, &QRadioButton::clicked,
+            this, &DeviceSelectionDialog::onConnectionTypeChanged);
+    connect(m_serialRadio, &QRadioButton::clicked,
             this, &DeviceSelectionDialog::onConnectionTypeChanged);
     connect(m_refreshSerialButton, &QPushButton::clicked,
             this, &DeviceSelectionDialog::onRefreshSerialPorts);
@@ -142,8 +146,11 @@ void DeviceSelectionDialog::refreshSerialPorts()
 
 void DeviceSelectionDialog::onConnectionTypeChanged()
 {
-    int buttonId = m_connectionTypeGroup->checkedId();
-    m_selectedType = static_cast<ConnectionType>(buttonId);
+    if (m_bluetoothRadio->isChecked()) {
+        m_selectedType = ConnectionType::BluetoothAuto;
+    } else if (m_serialRadio->isChecked()) {
+        m_selectedType = ConnectionType::SerialPort;
+    }
     updateControlStates();
 }
 
@@ -226,32 +233,4 @@ QString DeviceSelectionDialog::getLastUsedDevice()
 {
     QSettings settings("MacWake", "USB Display");
     return settings.value("device/lastUsed", "").toString();
-}
-
-bool DeviceSelectionDialog::isLastDeviceAvailable()
-{
-    QString lastDevice = MainWindow::QSettings("MacWake", "USB Display")
-                            .value("device/lastUsed", "").toString();
-    
-    if (lastDevice.isEmpty()) {
-        return false; // No previous device configured
-    }
-    
-    if (lastDevice == "bluetooth") {
-        // For Bluetooth, we assume it's available (will be discovered during scan)
-        return true;
-    }
-    
-    if (lastDevice.startsWith("serial:")) {
-        QString portName = lastDevice.mid(7);
-        const auto ports = QSerialPortInfo::availablePorts();
-        for (const auto &port : ports) {
-            if (port.portName() == portName) {
-                return true;
-            }
-        }
-        return false; // Serial port not found
-    }
-    
-    return false; // Unknown device type
 }

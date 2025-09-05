@@ -1,8 +1,8 @@
 #include "MainWindow.h"
 #include <QApplication>
 #include <QDir>
-#include <QStyleFactory>
 
+// NOLINT(clang-tidy-static-accessed-through-instance)
 int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
 

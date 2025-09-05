@@ -51,7 +51,7 @@ BluetoothManager::~BluetoothManager()
 void BluetoothManager::startScanning()
 {
     if (m_discoveryAgent->isActive()) {
-        qDebug() << "(Agent still active)";
+        //qDebug() << "(Agent still active)";
         return;
     }
     
@@ -72,18 +72,6 @@ void BluetoothManager::stopScanning()
     }
 }
 
-void BluetoothManager::requestData()
-{
-    // For devices that send notifications automatically, this might not be needed
-    // Just keep the connection alive
-    if (m_isConnected && m_service && m_dataCharacteristic.isValid()) {
-        qDebug() << "Device should be sending notifications automatically";
-        
-        // Optional: You could read once to trigger the device
-        // m_service->readCharacteristic(m_dataCharacteristic);
-    }
-}
-
 void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 {
     // Look for devices with "USB Power" or your specific device name
@@ -91,7 +79,7 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
     //qDebug() << "Found device:" << deviceName << " -";
     if (deviceName.contains("MacWake-USBPowerMeter", Qt::CaseInsensitive)) {
         
-        qDebug() << "Found target device:" << deviceName << info.address();
+        //qDebug() << "Found target device:" << deviceName << info.address();
         m_targetDevice = info;
         m_discoveryAgent->stop();
         connectToDevice(info);
@@ -100,9 +88,9 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 
 void BluetoothManager::onScanFinished()
 {
-    qDebug() << "Bluetooth scan finished";
+    //qDebug() << "Bluetooth scan finished";
     if (!m_isConnected && m_targetDevice.isValid()) {
-        qDebug() << "Connecting to target device " << m_targetDevice.name();
+        //qDebug() << "Connecting to target device " << m_targetDevice.name();
         connectToDevice(m_targetDevice);
     }
 }
@@ -130,19 +118,19 @@ void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
         emit deviceDisconnected();
     });
     
-    qDebug() << "Connecting to device:" << device.name();
+    //qDebug() << "Connecting to device:" << device.name();
     m_controller->connectToDevice();
 }
 
 void BluetoothManager::onControllerConnected()
 {
-    qDebug() << "BLE Controller connected";
+    //qDebug() << "BLE Controller connected";
     m_controller->discoverServices();
 }
 
 void BluetoothManager::onControllerDisconnected()
 {
-    qDebug() << "BLE Controller disconnected";
+    //qDebug() << "BLE Controller disconnected";
     m_isConnected = false;
     emit deviceDisconnected();
     
@@ -152,21 +140,21 @@ void BluetoothManager::onControllerDisconnected()
 
 void BluetoothManager::onServiceDiscovered(const QBluetoothUuid &uuid)
 {
-    qDebug() << "Service discovered:" << uuid.toString();
+    //qDebug() << "Service discovered:" << uuid.toString();
     if (uuid.toString(QUuid::WithBraces) == SERVICE_UUID) {
-        qDebug() << "Found target service";
+        //qDebug() << "Found target service";
     }
 }
 
 void BluetoothManager::onServiceDiscoveryFinished()
 {
-    qDebug() << "Service discovery finished";
+    //qDebug() << "Service discovery finished";
     
     QBluetoothUuid serviceUuid(SERVICE_UUID);
     m_service = m_controller->createServiceObject(serviceUuid, this);
     
     if (!m_service) {
-        qDebug() << "Target service not found";
+        //qDebug() << "Target service not found";
         return;
     }
     
@@ -196,15 +184,15 @@ void BluetoothManager::setupService()
     m_dataCharacteristic = m_service->characteristic(characteristicUuid);
     
     if (!m_dataCharacteristic.isValid()) {
-        qDebug() << "Data characteristic not found";
+        //qDebug() << "Data characteristic not found";
         return;
     }
     
-    qDebug() << "Found characteristic with properties:" << m_dataCharacteristic.properties();
+    //qDebug() << "Found characteristic with properties:" << m_dataCharacteristic.properties();
     
     // Enable notifications if supported
     if (m_dataCharacteristic.properties() & QLowEnergyCharacteristic::Notify) {
-        qDebug() << "Enabling notifications...";
+        //qDebug() << "Enabling notifications...";
         
         // Find the Client Characteristic Configuration Descriptor (CCCD)
         QLowEnergyDescriptor cccd = m_dataCharacteristic.descriptor(
@@ -213,15 +201,15 @@ void BluetoothManager::setupService()
         if (cccd.isValid()) {
             // Enable notifications by writing 0x0100 to CCCD
             m_service->writeDescriptor(cccd, QByteArray::fromHex("0100"));
-            qDebug() << "Notification enabled via CCCD";
+            //qDebug() << "Notification enabled via CCCD";
         } else {
-            qDebug() << "CCCD not found - notifications may not work";
+            //qDebug() << "CCCD not found - notifications may not work";
         }
     }
     
     // Check if indications are supported as fallback
     else if (m_dataCharacteristic.properties() & QLowEnergyCharacteristic::Indicate) {
-        qDebug() << "Enabling indications...";
+        //qDebug() << "Enabling indications...";
         
         QLowEnergyDescriptor cccd = m_dataCharacteristic.descriptor(
             QBluetoothUuid(static_cast<quint16>(0x2902)));
@@ -229,17 +217,17 @@ void BluetoothManager::setupService()
         if (cccd.isValid()) {
             // Enable indications by writing 0x0200 to CCCD
             m_service->writeDescriptor(cccd, QByteArray::fromHex("0200"));
-            qDebug() << "Indications enabled via CCCD";
+            //qDebug() << "Indications enabled via CCCD";
         }
     }
     else {
-        qDebug() << "Characteristic doesn't support notifications or indications";
+        //qDebug() << "Characteristic doesn't support notifications or indications";
     }
     
     m_isConnected = true;
     emit deviceConnected(m_targetDevice.name());
     
-    qDebug() << "BLE service setup complete";
+    //qDebug() << "BLE service setup complete";
 }
 
 void BluetoothManager::onCharacteristicRead(const QLowEnergyCharacteristic &characteristic, const QByteArray &value)

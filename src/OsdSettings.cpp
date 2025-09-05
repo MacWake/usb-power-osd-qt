@@ -4,13 +4,15 @@
 #include "SettingsDialog.h"
 
 #include <QApplication>
+#include <QDebug>
 #include <QStyleFactory>
 #include <QtGui/qscreen.h>
 #include <iostream>
 #include <sstream>
 
-OsdSettings::OsdSettings(const QString &organization, // NOLINT(*-pro-type-member-init)
-                         const QString &application, QObject *parent)
+OsdSettings::OsdSettings(
+    const QString &organization, // NOLINT(*-pro-type-member-init)
+    const QString &application, QObject *parent)
     : QSettings(organization, application, parent) {
   init();
 }
@@ -109,6 +111,12 @@ void OsdSettings::saveSettings() {
   sync();
 }
 
+QColor OsdSettings::colorValue(const QString &key, QColor default_color) {
+  if (this->contains(key)) {
+    return QColor(value(key).toString());
+  }
+  return default_color;
+}
 void OsdSettings::loadSettings() {
   this->always_on_top =
       value("view/always_on_top", this->always_on_top).toBool();
@@ -125,55 +133,14 @@ void OsdSettings::loadSettings() {
       value("measurement/amps_font_size", this->amps_font_size).toInt();
   this->min_current =
       value("measurement/min_current", this->min_current).toFloat();
-  QString color_string;
-  if (value("colors/background", color_string).toString() != "") {
-    this->color_bg = setting2Rgb(color_string);
-  }
-  if (value("colors/amps", color_string).toString() != "") {
-    this->color_amps = setting2Rgb(color_string);
-  }
-  if (value("colors/5v", color_string).toString() != "") {
-    this->color_5v = setting2Rgb(color_string);
-  }
-  if (value("colors/9v", color_string).toString() != "") {
-    this->color_9v = setting2Rgb(color_string);
-  }
-  if (value("colors/15v", color_string).toString() != "") {
-    this->color_15v = setting2Rgb(color_string);
-  }
-  if (value("colors/20v", color_string).toString() != "") {
-    this->color_20v = setting2Rgb(color_string);
-  }
-  if (value("colors/28v", color_string).toString() != "") {
-    this->color_28v = setting2Rgb(color_string);
-  }
-  if (value("colors/36v", color_string).toString() != "") {
-    this->color_36v = setting2Rgb(color_string);
-  }
-  if (value("colors/48v", color_string).toString() != "") {
-    this->color_48v = setting2Rgb(color_string);
-  }
+
+  this->color_amps = colorValue("colors/amps", this->color_amps);
+  this->color_5v = colorValue("colors/5v", this->color_5v);
+  this->color_9v = colorValue("colors/9v", this->color_9v);
+  this->color_15v = colorValue("colors/15v", this->color_15v);
+  this->color_20v = colorValue("colors/20v", this->color_20v);
+  this->color_28v = colorValue("colors/28v", this->color_28v);
+  this->color_36v = colorValue("colors/36v", this->color_36v);
+  this->color_48v = colorValue("colors/48v", this->color_48v);
   this->last_device = value("device/last", this->last_device).toString();
-}
-
-QColor OsdSettings::setting2Rgb(const QString &setting) {
-  std::string item;
-  std::vector<int> numbers;
-  auto tokens = setting.tokenize(QChar(','), Qt::SkipEmptyParts);
-
-  QList<int> values;
-  for (const auto &token : tokens) {
-    values.append(token.trimmed().toInt());
-  }
-
-  if (values.size() >= 3) {
-    return {values[0], values[1], values[2]};
-  }
-  return {}; // Invalid color
-}
-
-QString OsdSettings::rgb_to_string(const QColor &rgb) {
-  QString result;
-  result.asprintf("%d,%d,%d", rgb.red(), rgb.green(), rgb.blue());
-  return result;
 }
