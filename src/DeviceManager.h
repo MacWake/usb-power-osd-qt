@@ -16,6 +16,7 @@ public:
     void startScanning();
     void stopScanning();
     void requestPowerData();
+    bool tryConnect(const QString &portName);
 
 signals:
     void deviceConnected(const QString &deviceName);

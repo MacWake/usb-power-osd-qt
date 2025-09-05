@@ -18,7 +18,7 @@ class BluetoothManager : public QObject
 
 public:
     explicit BluetoothManager(QObject *parent = nullptr);
-    ~BluetoothManager();
+    ~BluetoothManager() override;
     
     void startScanning();
     void stopScanning();
@@ -45,7 +45,7 @@ private:
     void connectToDevice(const QBluetoothDeviceInfo &device);
     void setupService();
     void parseJsonAndEmitPowerData(const QByteArray &data);
-    PowerData parseJsonToPowerData(const QJsonObject &json);
+    static PowerData parseJsonToPowerData(const QJsonObject &json);
     
     QBluetoothDeviceDiscoveryAgent *m_discoveryAgent;
     QLowEnergyController *m_controller;

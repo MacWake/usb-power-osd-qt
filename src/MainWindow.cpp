@@ -1,28 +1,29 @@
 #include "MainWindow.h"
+#include "DeviceSelectionDialog.h"
 #include <QApplication>
 #include <QCloseEvent>
-#include <QGridLayout>
 #include <QLabel>
 #include <QMenuBar>
 #include <QStatusBar>
 #include <QTimer>
 #include <QWidget>
 
-MainWindow::MainWindow(QWidget *parent)
+MainWindow::MainWindow(QWidget *parent) // NOLINT(*-pro-type-member-init)
     : QMainWindow(parent), m_powerMonitor(new PowerMonitor(this)),
       m_deviceManager(new DeviceManager(this)),
       m_settings(new SettingsDialog(this)),
       m_history(new MeasurementHistory(1000)), // todo change hard coded value
       m_updateTimer(new QTimer(this)),
-      m_statusBarHideTimer(new QTimer(this))
+      m_statusBarHideTimer(new QTimer(this)),
+      m_deviceSelectionDialog(nullptr)
 
 {
   if (!this->settings) {
     this->settings = new OsdSettings("MacWake", "USB Display", this);
     this->settings->init();
     this->m_currentGraph = new CurrentGraph(this, m_history, settings);
-
   }
+  statusBar()->setVisible(false);
 
   if (MainWindow::settings->window_width > 0 &&
       MainWindow::settings->window_height > 0) {
@@ -47,29 +48,105 @@ MainWindow::MainWindow(QWidget *parent)
   m_statusBarHideTimer->setSingleShot(true); // Only fire once
   connect(m_statusBarHideTimer, &QTimer::timeout, this,
           &MainWindow::hideStatusBar);
-  //
-  // Start scanning for devices
-  m_deviceManager->startScanning();
 
-  statusBar()->showMessage("Scanning for USB Power devices...");
+  // Check if last device is available, show selection dialog if not
+  if (!DeviceSelectionDialog::isLastDeviceAvailable()) {
+    // Use a timer to show the dialog after the main window is fully initialized
+    QTimer::singleShot(100, this, &MainWindow::connectLastDevice);
+  } else {
+    // Start scanning with last known device settings
+    m_deviceManager->startScanning();
+    statusBar()->showMessage("Scanning for USB Power devices...");
+  }
 }
 
-MainWindow::~MainWindow() {}
+MainWindow::~MainWindow() = default;
 
 void MainWindow::showStatusMessage(const QString &message,
                                    int hideAfterMs = 5000) {
   statusBar()->setVisible(true);
   statusBar()->showMessage(message);
 
+  if (centralWidget()) {
+    centralWidget()->updateGeometry();
+    update();
+  }
+
   // Restart the timer (this will cancel any previous timer)
   m_statusBarHideTimer->start(hideAfterMs);
 }
 void MainWindow::hideStatusBar() {
   statusBar()->setVisible(false);
-  // Trigger a layout update to reclaim the space
-  positionWidgets();
-  emit QResizeEvent(size(), size());
+  
+  // Force the central widget to use the full available space
+  if (centralWidget()) {
+    // Get the current window size
+    QSize windowSize = size();
+    
+    // Calculate the new geometry for the central widget
+    // (accounting for menu bar but not status bar)
+    int menuBarHeight = menuBar()->isVisible() ? menuBar()->height() : 0;
+    QRect newGeometry(0, menuBarHeight, windowSize.width(), 
+                     windowSize.height() - menuBarHeight);
+    
+    centralWidget()->setGeometry(newGeometry);
+    
+    // Now reposition our widgets within the expanded central widget
+    positionWidgets();
+  }
 }
+
+void MainWindow::connectLastDevice()
+{
+  if (!settings->last_device.isEmpty()) {
+    this->m_deviceManager->tryConnect(settings->last_device);
+  }
+  if (!m_deviceSelectionDialog) {
+    m_deviceSelectionDialog = new DeviceSelectionDialog(this);
+  }
+  
+  if (m_deviceSelectionDialog->exec() == QDialog::Accepted) {
+    auto connectionType = m_deviceSelectionDialog->getSelectedConnectionType();
+    
+    if (connectionType == DeviceSelectionDialog::ConnectionType::BluetoothAuto) {
+      statusBar()->showMessage("Scanning for Bluetooth devices...");
+      m_deviceManager->startScanning();
+    } else if (connectionType == DeviceSelectionDialog::ConnectionType::SerialPort) {
+      QString selectedPort = m_deviceSelectionDialog->getSelectedSerialPort();
+      statusBar()->showMessage(QString("Connecting to %1...").arg(selectedPort));
+      m_deviceManager->startScanning();
+    }
+  } else {
+    // User cancelled - exit application
+    statusBar()->showMessage("No device selected. Exiting...");
+    QTimer::singleShot(2000, QApplication::instance(), &QApplication::quit);
+  }
+}
+
+void MainWindow::showDeviceSelectionDialog()
+{
+  if (!m_deviceSelectionDialog) {
+    m_deviceSelectionDialog = new DeviceSelectionDialog(this);
+  }
+
+  if (m_deviceSelectionDialog->exec() == QDialog::Accepted) {
+    auto connectionType = m_deviceSelectionDialog->getSelectedConnectionType();
+
+    if (connectionType == DeviceSelectionDialog::ConnectionType::BluetoothAuto) {
+      statusBar()->showMessage("Scanning for Bluetooth devices...");
+      m_deviceManager->startScanning();
+    } else if (connectionType == DeviceSelectionDialog::ConnectionType::SerialPort) {
+      QString selectedPort = m_deviceSelectionDialog->getSelectedSerialPort();
+      statusBar()->showMessage(QString("Connecting to %1...").arg(selectedPort));
+      m_deviceManager->startScanning();
+    }
+  } else {
+    // User cancelled - exit application
+    statusBar()->showMessage("No device selected. Exiting...");
+    QTimer::singleShot(2000, QApplication::instance(), &QApplication::quit);
+  }
+}
+
 // ReSharper disable CppDFAMemoryLeak
 void MainWindow::setupUI() {
   setWindowTitle("MacWake USB Power OSD");
@@ -94,20 +171,15 @@ void MainWindow::setupUI() {
   this->lblEnergy->setFont(*fntEnergy);
   this->lblMinMaxCurrent->setFont(*fntPower);
 
-  QColor invertedColor(255 - settings->color_bg.red(),
+  QColor color(255 - settings->color_bg.red(),
                        255 - settings->color_bg.green(),
                        255 - settings->color_bg.blue());
-  this->statusBar()->setStyleSheet("color: " + invertedColor.name() + ";");
-  this->lblVoltage->setStyleSheet("QLabel { color: " + invertedColor.name() +
-                                  "; }");
-  this->lblCurrent->setStyleSheet("QLabel { color: " + invertedColor.name() +
-                                  "; }");
-  this->lblPower->setStyleSheet("QLabel { color: " + invertedColor.name() +
-                                "; }");
-  this->lblEnergy->setStyleSheet("QLabel { color: " + invertedColor.name() +
-                                 "; }");
-  this->lblMinMaxCurrent->setStyleSheet(
-      "QLabel { color: " + invertedColor.name() + "; }");
+  this->statusBar()->setStyleSheet("color: " + color.name() + ";");
+  this->lblVoltage->setStyleSheet("QLabel { color: " + color.name() + "; }");
+  this->lblCurrent->setStyleSheet("QLabel { color: " + color.name() + "; }");
+  this->lblPower->setStyleSheet("QLabel { color: " + color.name() + "; }");
+  this->lblEnergy->setStyleSheet("QLabel { color: " + color.name() + "; }");
+  this->lblMinMaxCurrent->setStyleSheet( "QLabel { color: " + color.name() + "; }");
 
   this->lblVoltage->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
   this->lblCurrent->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -136,6 +208,8 @@ void MainWindow::setupUI() {
   auto *fileMenu = menuBar()->addMenu("&File");
   fileMenu->addAction("&Settings", this, &MainWindow::showSettings);
   fileMenu->addSeparator();
+  fileMenu->addAction("&Change Device", this, &MainWindow::showDeviceSelectionDialog);
+  fileMenu->addSeparator();
   fileMenu->addAction("E&xit", this, &QWidget::close);
 
   //    auto *viewMenu = menuBar()->addMenu("&View");
@@ -157,6 +231,7 @@ void MainWindow::positionWidgets() {
   const int topY = margin;
   const int leftColumnX = margin;
   const int rightColumnX = windowWidth / 2;
+  const int lineSpacing = -10;
 
   const int smallWidth = lblPower->fontMetrics().averageCharWidth() * 8;
   const int smallHeight = lblPower->fontMetrics().height() + 10;
@@ -173,7 +248,7 @@ void MainWindow::positionWidgets() {
                      lblCurrent->fontMetrics().height() + 10);
 
   // Second row - power, energy, min/max current
-  const int secondRowY = topY + lblVoltage->height() + labelSpacing;
+  const int secondRowY = topY + lblVoltage->height() + labelSpacing + lineSpacing;
 
   lblPower->move(leftColumnX, secondRowY);
   lblPower->resize(smallWidth, smallHeight);
@@ -209,13 +284,12 @@ void MainWindow::onPowerDataReceived(const PowerData &data) {
 }
 
 void MainWindow::onDeviceConnected(const QString &deviceName) {
-  showStatusMessage("Connected to " + deviceName);
+  showStatusMessage("Connected to " + deviceName + "; starting timer");
   m_updateTimer->start();
 }
 
 void MainWindow::onDeviceDisconnected() {
   showStatusMessage("Device disconnected");
-
   m_updateTimer->stop();
   updateUINoData();
 }
@@ -263,8 +337,8 @@ void MainWindow::updateUINoData() {
 
 void MainWindow::setBackgroundColor(const QColor &color) {
   setStyleSheet(QString("* { background-color: %1; }"
-            "QToolTip { background-color: white; color: black; }"
-).arg(color.name()).arg(color.name()).arg((color.lightness() > 128) ? Qt::black : Qt::white
+            "QToolTip { background-color: %2; color: %3; }"
+).arg(color.name(), color.name()).arg((color.lightness() > 128) ? Qt::black : Qt::white
 ));
 }
 
@@ -280,7 +354,7 @@ void MainWindow::resetMeasurementHistory() {
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
   if (obj == lblMinMaxCurrent && event->type() == QEvent::MouseButtonDblClick) {
-    QMouseEvent *mouseEvent = static_cast<QMouseEvent*>(event);
+    auto mouseEvent = dynamic_cast<QMouseEvent*>(event);
     if (mouseEvent->button() == Qt::LeftButton) {
       resetMeasurementHistory();
       return true; // Event handled

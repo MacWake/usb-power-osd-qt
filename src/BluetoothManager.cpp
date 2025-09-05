@@ -88,7 +88,7 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 {
     // Look for devices with "USB Power" or your specific device name
     QString deviceName = info.name();
-    qDebug() << "Found device:" << deviceName << " -";
+    //qDebug() << "Found device:" << deviceName << " -";
     if (deviceName.contains("MacWake-USBPowerMeter", Qt::CaseInsensitive)) {
         
         qDebug() << "Found target device:" << deviceName << info.address();
@@ -301,13 +301,9 @@ PowerData BluetoothManager::parseJsonToPowerData(const QJsonObject &json)
     data.current = json.value("current").toDouble(0.0);
     data.voltage = json.value("voltage").toDouble(0.0);
     data.power = json.value("power").toDouble(0.0);
-    
-    // Map "charge" to "energy" - you might want to convert units if needed
-    // Note: Your device sends "charge" but we map it to energy field
-    double charge = json.value("charge").toDouble(0.0);
+    data.energy = json.value("charge").toDouble(0.0);
     // You might need to convert charge to energy units here
-    // For now, just use it directly (adjust as needed)
-    
+
     // Use device timestamp if available, otherwise use current time
     data.timestamp = json.value("timestamp").toVariant().toULongLong();
     if (data.timestamp == 0) {

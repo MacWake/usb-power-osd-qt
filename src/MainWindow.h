@@ -7,6 +7,7 @@
 #include "OsdSettings.h"
 #include "PowerMonitor.h"
 #include "SettingsDialog.h"
+#include "DeviceSelectionDialog.h"
 #include <QAction>
 #include <QMainWindow>
 #include <QMenu>
@@ -33,6 +34,8 @@ private slots:
   void showSettings();
   void updateLabels();
   void hideStatusBar();
+  void connectLastDevice();
+  void showDeviceSelectionDialog();
   void resetMeasurementHistory();
 
 protected:
@@ -50,6 +53,7 @@ private:
   SettingsDialog *m_settings;
   OsdSettings *settings = nullptr;
   MeasurementHistory *m_history = nullptr;
+  DeviceSelectionDialog *m_deviceSelectionDialog;
 
   QTimer *m_updateTimer;
   QTimer *m_statusBarHideTimer;

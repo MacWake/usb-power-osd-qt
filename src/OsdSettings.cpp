@@ -9,7 +9,7 @@
 #include <iostream>
 #include <sstream>
 
-OsdSettings::OsdSettings(const QString &organization,
+OsdSettings::OsdSettings(const QString &organization, // NOLINT(*-pro-type-member-init)
                          const QString &application, QObject *parent)
     : QSettings(organization, application, parent) {
   init();
@@ -21,7 +21,7 @@ void OsdSettings::init() {
   // Default settings
   always_on_top = false;
   is_line_graph = false;
-  window_height = 200;
+  window_height = 300;
   window_width = 400;
   min_current = 0;
   volts_font_size = amps_font_size =
@@ -44,7 +44,7 @@ void OsdSettings::init() {
   color_28v = QColor(0xff, 0x00, 0x00);
   color_36v = QColor(0x00, 0xff, 0xff);
   color_48v = QColor(0x00, 0x00, 0xff);
-
+  last_device = QString();
   loadSettings();
 }
 
@@ -102,6 +102,7 @@ void OsdSettings::saveSettings() {
   setValue("colors/28v", this->color_28v);
   setValue("colors/36v", this->color_36v);
   setValue("colors/48v", this->color_48v);
+  setValue("device/last", this->last_device);
 
   // Ensure settings are written to disk
   std::cerr << "Settings saved." << std::endl;
@@ -152,6 +153,7 @@ void OsdSettings::loadSettings() {
   if (value("colors/48v", color_string).toString() != "") {
     this->color_48v = setting2Rgb(color_string);
   }
+  this->last_device = value("device/last", this->last_device).toString();
 }
 
 QColor OsdSettings::setting2Rgb(const QString &setting) {
@@ -165,9 +167,9 @@ QColor OsdSettings::setting2Rgb(const QString &setting) {
   }
 
   if (values.size() >= 3) {
-    return QColor(values[0], values[1], values[2]);
+    return {values[0], values[1], values[2]};
   }
-  return QColor(); // Invalid color
+  return {}; // Invalid color
 }
 
 QString OsdSettings::rgb_to_string(const QColor &rgb) {
