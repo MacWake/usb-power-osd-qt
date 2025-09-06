@@ -1,9 +1,7 @@
-// PDData.cpp
 
 #include "PowerDelivery.h"
 
-// Define the voltage values
-const int PowerDelivery::pd_volts[PD_COUNT] = {0, 5, 9, 15, 20, 28, 36, 48};
+const int PowerDelivery::pd_volts[PD_48V+1] = {0, 5, 9, 15, 20, 28, 36, 48};
 
 bool PowerDelivery::within(int value, int base_value) {
   const int variance = static_cast<int>(static_cast<float>(base_value) * 0.20);

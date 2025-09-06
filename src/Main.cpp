@@ -1,8 +1,8 @@
 #include "MainWindow.h"
 #include <QApplication>
 #include <QDir>
-#include <QStyleFactory>
 
+// NOLINT(clang-tidy-static-accessed-through-instance)
 int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
 
@@ -13,6 +13,9 @@ int main(int argc, char *argv[]) {
 
   // Set application icon
   app.setWindowIcon(QIcon(":/icons/app-icon.png"));
+
+  qDebug() << "Platform:" << QSysInfo::productType();
+  qDebug() << "Kernel:" << QSysInfo::kernelType();
 
   MainWindow window;
   window.show();

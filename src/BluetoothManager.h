@@ -8,7 +8,7 @@
 #include <QLowEnergyService>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include "PowerMonitor.h"  // For PowerData struct
+#include "PowerMonitor.h"
 
 QT_FORWARD_DECLARE_CLASS(QTimer)
 
@@ -18,11 +18,10 @@ class BluetoothManager : public QObject
 
 public:
     explicit BluetoothManager(QObject *parent = nullptr);
-    ~BluetoothManager();
+    ~BluetoothManager() override;
     
     void startScanning();
     void stopScanning();
-    void requestData();
 
 signals:
     void deviceConnected(const QString &deviceName);
@@ -45,7 +44,7 @@ private:
     void connectToDevice(const QBluetoothDeviceInfo &device);
     void setupService();
     void parseJsonAndEmitPowerData(const QByteArray &data);
-    PowerData parseJsonToPowerData(const QJsonObject &json);
+    static PowerData parseJsonToPowerData(const QJsonObject &json);
     
     QBluetoothDeviceDiscoveryAgent *m_discoveryAgent;
     QLowEnergyController *m_controller;

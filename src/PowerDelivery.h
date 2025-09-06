@@ -16,7 +16,6 @@ public:
     PD_28V = 5,
     PD_36V = 6,
     PD_48V = 7,
-    PD_COUNT = 8,
   };
 
   static bool within(int value, int base_value);
@@ -29,8 +28,8 @@ public:
 
 private:
   // Color definitions corresponding to `PD_VOLTS`
-  static const std::string colors[PD_COUNT];
+  static const std::string colors[PD_48V+1];
 
   // Voltage values corresponding to `PD_VOLTS`
-  static const int pd_volts[PD_COUNT];
+  static const int pd_volts[PD_48V+1];
 };
