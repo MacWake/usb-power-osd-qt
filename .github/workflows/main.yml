@@ -44,6 +44,41 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Install Qt for other platforms
+      - name: Install Qt (non-macOS)
+        if: matrix.name != 'macos-latest'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.5.3'
+          host: ${{ matrix.name == 'windows-cross' && 'windows' || 'linux' }}
+          target: 'desktop'
+          arch: ${{ matrix.name == 'windows-cross' && 'win64_mingw' || 'gcc_64' }}
+          modules: 'qtserialport qtconnectivity'
+          setup-python: 'false'
+          cache: true
+          tools: ${{ matrix.name == 'windows-cross' && 'tools_mingw90' || '' }}
+
+      # Fix Qt tools permissions for MinGW cross-compilation
+      - name: Fix Qt tools permissions (Windows cross-compilation)
+        if: matrix.name == 'windows-cross'
+        run: |
+          # Find and fix permissions for Qt tools
+          find $RUNNER_WORKSPACE -name "*.exe" -path "*/Qt/*" -exec chmod +x {} \;
+          
+          # Specifically find and test moc
+          MOC_PATH=$(find $RUNNER_WORKSPACE -name "moc.exe" -path "*/Qt/*" | grep mingw | head -1)
+          if [ -n "$MOC_PATH" ]; then
+            echo "Found moc at: $MOC_PATH"
+            chmod +x "$MOC_PATH"
+            ls -la "$MOC_PATH"
+            # Test if we can run it through wine (if available) or just ensure it's executable
+            file "$MOC_PATH" || echo "file command not available"
+          else
+            echo "moc.exe not found in MinGW Qt installation"
+            echo "Available Qt installations:"
+            find $RUNNER_WORKSPACE -path "*/Qt/*" -name "bin" -type d
+          fi
+
       # Install Qt for all platforms
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -114,7 +149,7 @@ jobs:
           
           # Create AppDir structure
           mkdir -p AppDir/usr/bin
-          cp "${{github.workspace}}/build/usb-power-osd" AppDir/usr/bin/
+          cp "${{github.workspace}}/build/USB-C Power OSD" AppDir/usr/bin/
           
           # Create desktop file
           cat > AppDir/usb-power-osd.desktop << 'EOF'
