@@ -29,6 +29,17 @@ jobs:
             build_type: Release
 
     steps:
+      # Workaround for Python environment issue on macOS
+      - name: Setup Python environment (macOS)
+        if: matrix.name == 'macos-latest'
+        run: |
+          # Create a virtual environment to avoid externally-managed-environment error
+          python3 -m venv ~/.qt-venv
+          source ~/.qt-venv/bin/activate
+          pip install setuptools py7zr
+          echo "VIRTUAL_ENV=$HOME/.qt-venv" >> $GITHUB_ENV
+          echo "$HOME/.qt-venv/bin" >> $GITHUB_PATH
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
