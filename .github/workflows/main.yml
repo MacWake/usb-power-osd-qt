@@ -38,7 +38,7 @@ jobs:
           host: ${{ matrix.os == 'windows-cross' && 'windows' || matrix.os == 'macos-latest' && 'mac' || 'linux' }}
           target: 'desktop'
           arch: ${{ matrix.os == 'windows-cross' && 'win64_msvc2019_64' || matrix.os == 'macos-latest' && 'clang_64' || 'gcc_64' }}
-          modules: 'qtserialport qtbluetooth'
+          modules: 'qtserialport qtconnectivity'
           setup-python: true
 
       # Install additional Linux dependencies if needed
