@@ -36,14 +36,12 @@ DeviceManager::DeviceManager(QObject *parent)
           [this](const PowerData &data) { emit powerDataReceived(data); });
 }
 
-// ADD THESE MISSING METHODS:
-
-void DeviceManager::startScanning() {
+void DeviceManager::startBtScanning() {
   m_bluetoothManager->startScanning();
-  // m_serialManager->startScanning();
+  m_serialManager->disconnect();
 }
 
-void DeviceManager::stopScanning() {
+void DeviceManager::stopBtScanning() {
   m_bluetoothManager->stopScanning();
   // m_serialManager->stopScanning();
 }
@@ -61,9 +59,18 @@ bool DeviceManager::tryConnect(const QString &portName) {
   }
   return false;
 }
+bool DeviceManager::isBLEAutoConnect() const {
+  return m_isBluetoothConnected;
+}
 
 void DeviceManager::onBluetoothDeviceConnected(const QString &deviceName) {
   m_isBluetoothConnected = true;
+  if (this->m_isSerialConnected) {
+    m_isSerialConnected = false;
+    this->m_serialManager->disconnect();
+  }
+  this->m_settings->last_device = "ble";
+  this->m_settings->saveSettings();
   emit deviceConnected(deviceName + " (Bluetooth)");
 }
 
@@ -76,8 +83,11 @@ void DeviceManager::onBluetoothDeviceDisconnected() {
 
 void DeviceManager::onSerialDeviceConnected(const QString &deviceName) {
   m_isSerialConnected = true;
+  m_isBluetoothConnected = false;
   this->m_settings->last_device = deviceName;
   this->m_settings->saveSettings();
+  this->m_bluetoothManager->stopScanning();
+  this->m_bluetoothManager->disconnect();
   emit deviceConnected(deviceName + " (Serial)");
 }
 

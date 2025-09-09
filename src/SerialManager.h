@@ -23,6 +23,7 @@ public:
     ~SerialManager() override;
     
     bool connectSerialDevice(const QSerialPortInfo &portInfo);
+    void disconnect();
 
 signals:
     void deviceConnected(const QString &deviceName);
@@ -31,7 +32,7 @@ signals:
 
 private slots:
     void onSerialDataReady();
-    void onSerialError(QSerialPort::SerialPortError error);
+  void onSerialError(QSerialPort::SerialPortError error);
     bool tryConnect(const QString &portName);
     bool waitForLineAvailable(int timeoutMs);
 
@@ -42,7 +43,6 @@ private slots:
     bool checkMacwakeProtocol();
 
     QSerialPort *m_serialPort;
-    QTimer *m_scanTimer;
     QByteArray m_readBuffer;
     bool m_isConnected = false;
     SerialProtocol m_protocol;

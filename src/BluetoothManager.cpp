@@ -1,10 +1,13 @@
 #include "BluetoothManager.h"
-#include <QTimer>
+
+#include "DeviceManager.h"
+
+#include <QDateTime>
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QDateTime>
+#include <QTimer>
 
 // These UUIDs should match your V2-BLE firmware implementation
 //#define SERVICE_UUID "01bc9d6f-5b93-41bc-b63f-da5011e34f68"
@@ -51,10 +54,9 @@ BluetoothManager::~BluetoothManager()
 void BluetoothManager::startScanning()
 {
     if (m_discoveryAgent->isActive()) {
-        //qDebug() << "(Agent still active)";
         return;
     }
-    
+    m_isActive = true;
     qDebug() << "Starting Bluetooth scan...";
     m_discoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
     
@@ -66,19 +68,37 @@ void BluetoothManager::startScanning()
 void BluetoothManager::stopScanning()
 {
     qDebug() << "Stopping Bluetooth scan...";
+    m_isActive = false;
     m_scanTimer->stop();
     if (m_discoveryAgent->isActive()) {
         m_discoveryAgent->stop();
     }
 }
 
+void BluetoothManager::disconnect()
+{
+    stopScanning();
+    if (m_controller) {
+        qDebug() << "Disconnecting from BLE device...";
+        m_controller->disconnectFromDevice();
+        m_targetDevice = QBluetoothDeviceInfo();
+    }
+    m_isConnected = false;
+    m_isActive = false;
+    //emit deviceDisconnected();
+}
+
 void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 {
     // Look for devices with "USB Power" or your specific device name
     QString deviceName = info.name();
-    //qDebug() << "Found device:" << deviceName << " -";
+    qDebug() << "Found device:" << deviceName << " -";
     if (deviceName.contains("MacWake-USBPowerMeter", Qt::CaseInsensitive)) {
-        
+        auto deviceMgr = dynamic_cast<DeviceManager*>(this->parent());
+        if (!this->m_isActive) {
+            qDebug() << "Ignoring found device - not active";
+            return;
+        }
         //qDebug() << "Found target device:" << deviceName << info.address();
         m_targetDevice = info;
         m_discoveryAgent->stop();
@@ -88,9 +108,9 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 
 void BluetoothManager::onScanFinished()
 {
-    //qDebug() << "Bluetooth scan finished";
+    qDebug() << "Bluetooth scan finished";
     if (!m_isConnected && m_targetDevice.isValid()) {
-        //qDebug() << "Connecting to target device " << m_targetDevice.name();
+        qDebug() << "Connecting to target device " << m_targetDevice.name();
         connectToDevice(m_targetDevice);
     }
 }

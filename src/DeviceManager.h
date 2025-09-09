@@ -13,10 +13,11 @@ class DeviceManager : public QObject {
 public:
   explicit DeviceManager(QObject *parent = nullptr);
 
-  void startScanning();
-  void stopScanning();
+  void startBtScanning();
+  void stopBtScanning();
   bool tryConnect(const QString &portName);
   void setSettings(OsdSettings *settings) { m_settings = settings; }
+  bool isBLEAutoConnect() const;
 
 signals:
   void deviceConnected(const QString &deviceName);

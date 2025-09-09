@@ -34,8 +34,6 @@ private slots:
 private:
   void setupUI();
   void updateControlStates();
-  void saveSelectedDevice();
-  QString getLastUsedDevice();
 
   // UI components
   QVBoxLayout *m_mainLayout;

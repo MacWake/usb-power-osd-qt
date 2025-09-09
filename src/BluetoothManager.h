@@ -22,8 +22,9 @@ public:
     
     void startScanning();
     void stopScanning();
+    void disconnect();
 
-signals:
+  signals:
     void deviceConnected(const QString &deviceName);
     void deviceDisconnected();
     void dataReceived(const QByteArray &data);           // Keep raw data signal
@@ -59,7 +60,8 @@ private:
     // Energy accumulation for BLE data
     double m_energyAccumulator = 0.0;
     quint64 m_lastTimestamp = 0;
-    
+    bool m_isActive;
+
     // USB Power OSD V2-BLE service and characteristic UUIDs
     static const QString SERVICE_UUID;
     static const QString DATA_CHARACTERISTIC_UUID;

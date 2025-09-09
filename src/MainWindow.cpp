@@ -99,19 +99,20 @@ void MainWindow::hideStatusBar() {
 }
 
 void MainWindow::connectLastDevice(bool reconnecting = false) {
-  //qDebug() << "Trying to connect to last device...";
+  qDebug() << "Trying to connect to last device... (reconnect="<<reconnecting<<")";
   if (!settings->last_device.isEmpty()) {
+    qDebug() << "Trying to connect to last device " << settings->last_device;
     if (this->m_deviceManager->tryConnect(settings->last_device)) {
-      //qDebug() << "Connected to last device " << settings->last_device;
       if (reconnecting) {
         this->m_reconnect_timer->stop();
       }
       return;
     } else {
-      //qDebug() << "Failed to connect to last device " << settings->last_device;
+      // qDebug() << "Failed to connect to last device " <<
+      // settings->last_device;
     }
   } else {
-    //qDebug() << "No last device found";
+    // qDebug() << "No last device found";
   }
   if (!reconnecting) {
     this->showDeviceSelectionDialog();
@@ -119,25 +120,32 @@ void MainWindow::connectLastDevice(bool reconnecting = false) {
 }
 
 void MainWindow::showDeviceSelectionDialog() {
+  this->m_reconnect_timer->stop();
   if (!m_deviceSelectionDialog) {
     m_deviceSelectionDialog = new DeviceSelectionDialog(this);
   }
 
   if (m_deviceSelectionDialog->exec() == QDialog::Accepted) {
-    //qDebug() << "Accepted DeviceSelectionDialog";
+    // qDebug() << "Accepted DeviceSelectionDialog";
     auto connectionType = m_deviceSelectionDialog->getSelectedConnectionType();
 
-    //qDebug() << "Selected connection type: " << static_cast<int>(connectionType);
+    // qDebug() << "Selected connection type: " <<
+    // static_cast<int>(connectionType);
     if (connectionType ==
         DeviceSelectionDialog::ConnectionType::BluetoothAuto) {
-      //qDebug() << "Bluetooth auto discovery is enabled";
+      // qDebug() << "Bluetooth auto discovery is enabled";
 
       statusBar()->showMessage("Scanning for Bluetooth devices...");
-      m_deviceManager->startScanning();
+      m_deviceManager->startBtScanning();
+      this->settings->last_device = "ble";
+      this->settings->saveSettings();
     } else if (connectionType ==
                DeviceSelectionDialog::ConnectionType::SerialPort) {
+      m_deviceManager->stopBtScanning();
       QString selectedPort = m_deviceSelectionDialog->getSelectedSerialPort();
-      //qDebug() << "Selected serial port: " << selectedPort;
+      // qDebug() << "Selected serial port: " << selectedPort;
+      this->settings->last_device = selectedPort;
+      this->settings->saveSettings();
       statusBar()->showMessage(
           QString("Connecting to %1...").arg(selectedPort));
       if (!m_deviceManager->tryConnect(selectedPort)) {
@@ -146,7 +154,7 @@ void MainWindow::showDeviceSelectionDialog() {
         return;
       }
     } else {
-      //qDebug() << "No connection type selected";
+      // qDebug() << "No connection type selected";
       return;
     }
   } else {

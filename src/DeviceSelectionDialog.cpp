@@ -6,14 +6,12 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSerialPortInfo>
-#include <QSettings>
-#include <QStyle>
 
 DeviceSelectionDialog::DeviceSelectionDialog(QWidget *parent)
     : QDialog(parent)
     , m_selectedType(ConnectionType::None)
 {
-    m_parent = static_cast<MainWindow *>(parent);
+    m_parent = dynamic_cast<MainWindow *>(parent);
     setWindowTitle("Select Connection Method");
     setModal(true);
     setFixedSize(450, 280);
@@ -23,22 +21,18 @@ DeviceSelectionDialog::DeviceSelectionDialog(QWidget *parent)
     updateControlStates();
     
     // Load last used device settings
-    QString lastDevice = getLastUsedDevice();
-    if (lastDevice.startsWith("bluetooth")) {
+    QString lastDevice = m_parent->getSettings()->last_device;
+    if (lastDevice.startsWith("ble")) {
         m_bluetoothRadio->setChecked(true);
         m_selectedType = ConnectionType::BluetoothAuto;
-    } else if (lastDevice.startsWith("serial:")) {
+    } else {
         m_serialRadio->setChecked(true);
         m_selectedType = ConnectionType::SerialPort;
-        QString portName = lastDevice.mid(7); // Remove "serial:" prefix
+        QString portName = lastDevice;
         int index = m_serialPortCombo->findData(portName);
         if (index >= 0) {
             m_serialPortCombo->setCurrentIndex(index);
         }
-    } else {
-        // Default to Bluetooth if no previous setting
-        m_bluetoothRadio->setChecked(true);
-        m_selectedType = ConnectionType::BluetoothAuto;
     }
     
     updateControlStates();
@@ -190,8 +184,6 @@ void DeviceSelectionDialog::onOkButtonClicked()
             return;
         }
     }
-    
-    saveSelectedDevice();
     accept();
 }
 
@@ -208,29 +200,4 @@ DeviceSelectionDialog::ConnectionType DeviceSelectionDialog::getSelectedConnecti
 QString DeviceSelectionDialog::getSelectedSerialPort() const
 {
     return m_selectedSerialPort;
-}
-
-void DeviceSelectionDialog::saveSelectedDevice()
-{
-    QSettings settings("MacWake", "USB Display");
-    
-    switch (m_selectedType) {
-    case ConnectionType::BluetoothAuto:
-        settings.setValue("device/lastUsed", "bluetooth");
-        break;
-    case ConnectionType::SerialPort:
-        settings.setValue("device/lastUsed", QString("serial:%1").arg(m_selectedSerialPort));
-        break;
-    case ConnectionType::None:
-        settings.remove("device/lastUsed");
-        break;
-    }
-    
-    settings.sync();
-}
-
-QString DeviceSelectionDialog::getLastUsedDevice()
-{
-    QSettings settings("MacWake", "USB Display");
-    return settings.value("device/lastUsed", "").toString();
 }

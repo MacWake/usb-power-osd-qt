@@ -3,7 +3,6 @@
 #include "OsdSettings.h"
 #include "PowerData.h"
 
-//#include "hexdump.h"
 #include <QDebug>
 #include <QThread>
 #include <iostream>
@@ -11,6 +10,7 @@
 
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qdatetime.h>
+#include <QException>
 
 // These should match your USB Power OSD V2 device VID/PID
 const quint16 SerialManager::TARGET_VENDOR_ID = 0x0483;  // STMicroelectronics
@@ -31,27 +31,22 @@ static int8_t hex2bin(const unsigned char c) {
 
 static int16_t hex4_to_uint16(const char *buf) {
   const int16_t val =
-      0 | (hex2bin(buf[0]) << 12) |
-      (hex2bin(buf[1]) << 8) | // NOLINT(*-narrowing-conversions)
-      (hex2bin(buf[2]) << 4) | hex2bin(buf[3]);
+      (hex2bin(buf[0]) << 12) | // NOLINT(*-narrowing-conversions)
+      (hex2bin(buf[1]) << 8) |  // NOLINT(*-narrowing-conversions)
+      (hex2bin(buf[2]) << 4) |  // NOLINT(*-narrowing-conversions)
+      hex2bin(buf[3]);
   return val;
 }
 static int16_t hex4_to_int16(const char *buf) {
-  return strtol(buf, nullptr, 16);
+  return static_cast<int16_t>(strtol(buf, nullptr, 16));
 }
 
 SerialManager::SerialManager(QObject *parent)
-    : QObject(parent), m_serialPort(new QSerialPort(this)),
-      m_scanTimer(new QTimer(this)) {
+    : QObject(parent), m_serialPort(new QSerialPort(this)) {
   connect(m_serialPort, &QSerialPort::readyRead, this,
           &SerialManager::onSerialDataReady);
   connect(m_serialPort, &QSerialPort::errorOccurred, this,
           &SerialManager::onSerialError);
-
-  // Scan for devices periodically
-  // m_scanTimer->setInterval(5000); // 5 seconds
-  // connect(m_scanTimer, &QTimer::timeout, this,
-  // &SerialManager::scanForDevices);
 }
 
 SerialManager::~SerialManager() {
@@ -60,70 +55,6 @@ SerialManager::~SerialManager() {
   }
 }
 
-bool SerialManager::tryConnect(const QString &portName) {
-  QSerialPortInfo serialPortInfo(portName);
-  return this->connectSerialDevice(serialPortInfo);
-}
-
-bool SerialManager::waitForLineAvailable(int timeoutMs) {
-  QElapsedTimer timer;
-  timer.start();
-  while (timer.elapsed() < timeoutMs) {
-    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
-
-    if (m_serialPort->canReadLine()) {
-      return true;
-    }
-    QThread::msleep(10);
-  }
-
-  return false;
-}
-bool SerialManager::checkPLDProtocol() {
-  //qDebug() << "Checking for PLD protocol...";
-
-  if (!this->waitForLineAvailable(1000)) {
-    std::cerr << "checkPLDProtocol: timeout 1" << std::endl;
-    return false;
-  }
-  QByteArray line = m_serialPort->readLine();
-  //hexdump(line);
-  if (line.size() < 8) {
-    //qDebug() << "line size: " << line.size() << " too small, read next line";
-    if (!this->waitForLineAvailable(1000)) {
-      std::cerr << "checkPLDProtocol: timeout 2" << std::endl;
-      return false;
-    }
-    line = m_serialPort->readLine();
-    //hexdump(line);
-  }
-  if (line.size() < 8) {
-    //qDebug() << "line size: " << line.size() << " still too small, failure";
-    return false;
-  }
-  if (line.endsWith('\n')) {
-    line = line.trimmed();
-  }
-  if (line.length() == 9) {
-    if (line.at(8) == 28) {
-      //qDebug() << "PLD28 detected (by byte)";
-      m_protocol = SerialProtocol::PLD28;
-    } else if (line.at(8) == 20) {
-      //qDebug() << "PLD20 detected (by byte)";
-      m_protocol = SerialProtocol::PLD20;
-    }
-  } else if (line.length() == 8) {
-    //qDebug() << "PLD20 detected (by length)";
-    m_protocol = SerialProtocol::PLD20;
-  } else {
-    std::cerr << "checkPLDProtocol: Cannot obtain frame type" << std::endl;
-    return false;
-  }
-  return true;
-}
-bool SerialManager::checkMacwakeProtocol() {
-  return false; // TODO
-}
 bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
   if (m_serialPort->isOpen()) {
     m_serialPort->close();
@@ -136,13 +67,14 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
   m_serialPort->setStopBits(QSerialPort::OneStop);
   m_serialPort->setFlowControl(QSerialPort::NoFlowControl);
 
-  //qDebug() << "Trying to connect to serial device:" << portInfo.portName();
+  // qDebug() << "Trying to connect to serial device:" << portInfo.portName();
   if (!m_serialPort->open(QIODevice::ReadWrite)) {
-    //qDebug() << "Failed to open serial port with 9600:" << m_serialPort->errorString();
+    // qDebug() << "Failed to open serial port with 9600:" <<
+    // m_serialPort->errorString();
     return false;
   }
-  //qDebug() << "Opened serial port with 9600:" << portInfo.portName();
-  // Test basic functionality
+  // qDebug() << "Opened serial port with 9600:" << portInfo.portName();
+  //  Test basic functionality
   if (!m_serialPort->isWritable() || !m_serialPort->isReadable()) {
     qDebug() << "Serial port opened but has limited functionality";
     m_serialPort->close();
@@ -152,14 +84,17 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
   if (this->checkPLDProtocol()) {
     m_isConnected = true;
     emit deviceConnected(portInfo.portName());
-    //qDebug() << "Connected to serial device type " << this->m_protocol << ":" << portInfo.portName();
+    // qDebug() << "Connected to serial device type " << this->m_protocol << ":"
+    // << portInfo.portName();
     return true;
   } else {
-    //qDebug() << "Cannot detect protocol with 9600 on serial device:" << portInfo.portName();
+    // qDebug() << "Cannot detect protocol with 9600 on serial device:" <<
+    // portInfo.portName();
     m_serialPort->close();
     m_serialPort->setBaudRate(QSerialPort::Baud115200);
     if (!m_serialPort->open(QIODevice::ReadWrite)) {
-      // qDebug() << "Failed to open serial port with 115200:" << m_serialPort->errorString();
+      // qDebug() << "Failed to open serial port with 115200:" <<
+      // m_serialPort->errorString();
       return false;
     }
     if (this->checkMacwakeProtocol()) {
@@ -172,6 +107,17 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
   }
 }
 
+void SerialManager::disconnect() {
+  qDebug() << "Disconnecting from serial device";
+  try {
+    if (m_serialPort->isOpen()) {
+      m_serialPort->close();
+    }
+  } catch (QException &e) {
+    qDebug() << "Exception while disconnecting: " << e.what();
+  }
+  m_isConnected = false;
+}
 void SerialManager::onSerialDataReady() {
   if (!m_isConnected) {
     return;
@@ -197,16 +143,18 @@ void SerialManager::onSerialDataReady() {
     current_quanta = 0.06; // with 100mR shunt
   } else {
     qDebug() << "Unhandled protocol " << m_protocol;
+    return;
   }
   // printf("len=%d\n", static_cast<int>(strlen(serial_buffer)));
   if (line.size() < 8 || line.size() > 11) {
     qDebug() << "Bad packet length " << line.size();
     return;
   }
-  int shunt_voltage = hex4_to_int16(line.sliced(0,4).toStdString().c_str());
-  //printf("Shunt: %d\n", shunt_voltage);
+  int shunt_voltage = hex4_to_int16(line.sliced(0, 4).toStdString().c_str());
+  // printf("Shunt: %d\n", shunt_voltage);
 
-  auto bus_voltage = static_cast<double>(hex4_to_uint16(line.sliced(4,4).toStdString().c_str()));
+  auto bus_voltage = static_cast<double>(
+      hex4_to_uint16(line.sliced(4, 4).toStdString().c_str()));
   // if (frame_type == OSD_MODE_20V && (bus_voltage & 0x0001)) {
   //     std::cerr << "bad data?" << std::endl;
   //     break;
@@ -219,7 +167,7 @@ void SerialManager::onSerialDataReady() {
   int milliamps = abs(
       static_cast<int>(static_cast<double>(shunt_voltage) * current_quanta));
   int millivolts = static_cast<int>(bus_voltage * voltage_quanta);
-  //printf("Millivolts: %f\n", bus_voltage * voltage_quanta);
+  // printf("Millivolts: %f\n", bus_voltage * voltage_quanta);
 
   PowerData sample;
   sample.current = milliamps / 1000.0;
@@ -229,11 +177,76 @@ void SerialManager::onSerialDataReady() {
 
   emit dataReceived(sample);
 }
-
 void SerialManager::onSerialError(QSerialPort::SerialPortError error) {
   if (error != QSerialPort::NoError) {
     qDebug() << "Serial port error:" << error;
-    if (m_isConnected)emit deviceDisconnected();
+    if (m_isConnected)
+      emit deviceDisconnected();
     m_isConnected = false;
   }
+}
+bool SerialManager::tryConnect(const QString &portName) {
+  QSerialPortInfo serialPortInfo(portName);
+  return this->connectSerialDevice(serialPortInfo);
+}
+
+bool SerialManager::waitForLineAvailable(int timeoutMs) {
+  QElapsedTimer timer;
+  timer.start();
+  while (timer.elapsed() < timeoutMs) {
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+
+    if (m_serialPort->canReadLine()) {
+      return true;
+    }
+    QThread::msleep(10);
+  }
+
+  return false;
+}
+
+bool SerialManager::checkPLDProtocol() {
+  // qDebug() << "Checking for PLD protocol...";
+
+  if (!this->waitForLineAvailable(1000)) {
+    std::cerr << "checkPLDProtocol: timeout 1" << std::endl;
+    return false;
+  }
+  QByteArray line = m_serialPort->readLine();
+  // hexdump(line);
+  if (line.size() < 8) {
+    // qDebug() << "line size: " << line.size() << " too small, read next line";
+    if (!this->waitForLineAvailable(1000)) {
+      std::cerr << "checkPLDProtocol: timeout 2" << std::endl;
+      return false;
+    }
+    line = m_serialPort->readLine();
+    // hexdump(line);
+  }
+  if (line.size() < 8) {
+    // qDebug() << "line size: " << line.size() << " still too small, failure";
+    return false;
+  }
+  if (line.endsWith('\n')) {
+    line = line.trimmed();
+  }
+  if (line.length() == 9) {
+    if (line.at(8) == 28) {
+      // qDebug() << "PLD28 detected (by byte)";
+      m_protocol = SerialProtocol::PLD28;
+    } else if (line.at(8) == 20) {
+      // qDebug() << "PLD20 detected (by byte)";
+      m_protocol = SerialProtocol::PLD20;
+    }
+  } else if (line.length() == 8) {
+    // qDebug() << "PLD20 detected (by length)";
+    m_protocol = SerialProtocol::PLD20;
+  } else {
+    std::cerr << "checkPLDProtocol: Cannot obtain frame type" << std::endl;
+    return false;
+  }
+  return true;
+}
+bool SerialManager::checkMacwakeProtocol() {
+  return false; // TODO
 }

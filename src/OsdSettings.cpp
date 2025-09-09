@@ -5,12 +5,11 @@
 
 #include <QApplication>
 #include <QDebug>
-#include <QStyleFactory>
 #include <QtGui/qscreen.h>
 #include <iostream>
 #include <sstream>
 
-OsdSettings::OsdSettings(
+OsdSettings::OsdSettings( // NOLINT(*-pro-type-member-init)
     const QString &organization, // NOLINT(*-pro-type-member-init)
     const QString &application, QObject *parent)
     : QSettings(organization, application, parent) {
@@ -107,6 +106,7 @@ void OsdSettings::saveSettings() {
   setValue("device/last", this->last_device);
 
   // Ensure settings are written to disk
+  qDebug() << "Last device:"<<this->last_device;
   std::cerr << "Settings saved." << std::endl;
   sync();
 }
