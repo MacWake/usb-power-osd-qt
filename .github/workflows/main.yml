@@ -193,20 +193,46 @@ jobs:
           cd ${{github.workspace}}/deploy
           tar -czf ../USB-Power-OSD-Linux.tar.gz linux/
 
-      # Windows deployment - use Linux Qt build instead of cross-compilation
-      - name: Build Windows executable (alternative approach)
+      # Windows deployment - bundle Qt libraries
+      - name: Deploy Qt libraries (Windows)
         if: matrix.name == 'windows-cross'
         run: |
-          # Skip the complex cross-compilation and just create a placeholder
-          # You can use a different approach like building on actual Windows
+          # Create deployment directory
           mkdir -p ${{github.workspace}}/deploy/windows
-          echo "Windows cross-compilation skipped - use Windows runner instead" > ${{github.workspace}}/deploy/windows/README.txt
+          
+          # Copy the executable
+          cp "${{github.workspace}}/build/USB Power OSD.exe" ${{github.workspace}}/deploy/windows/
+          
+          # Copy MinGW runtime libraries
+          cp /usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll ${{github.workspace}}/deploy/windows/ || echo "libwinpthread-1.dll not found"
+          cp /usr/lib/gcc/x86_64-w64-mingw32/*/libgcc_s_seh-1.dll ${{github.workspace}}/deploy/windows/ || echo "libgcc_s_seh-1.dll not found"
+          cp /usr/lib/gcc/x86_64-w64-mingw32/*/libstdc++-6.dll ${{github.workspace}}/deploy/windows/ || echo "libstdc++-6.dll not found"
+          
+          # Copy Qt libraries (you'll need to identify which Qt libs your app uses)
+          # These paths may vary depending on how Qt was installed by install-qt-action
+          QT_DIR=$(find $RUNNER_WORKSPACE -name "Qt" -type d | head -1)
+          if [ -n "$QT_DIR" ]; then
+            QT_BIN_DIR=$(find $QT_DIR -path "*/6.5.0/*/bin" -type d | grep mingw | head -1)
+            QT_LIB_DIR=$(find $QT_DIR -path "*/6.5.0/*/lib" -type d | grep mingw | head -1)
+          
+            if [ -n "$QT_BIN_DIR" ]; then
+              echo "Found Qt bin directory: $QT_BIN_DIR"
+              cp $QT_BIN_DIR/Qt6Core.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Core.dll not found"
+              cp $QT_BIN_DIR/Qt6Gui.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Gui.dll not found"
+              cp $QT_BIN_DIR/Qt6Widgets.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Widgets.dll not found"
+              cp $QT_BIN_DIR/Qt6Bluetooth.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Bluetooth.dll not found"
+              cp $QT_BIN_DIR/Qt6SerialPort.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6SerialPort.dll not found"
+              cp $QT_BIN_DIR/Qt6Network.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Network.dll not found"
+          
+              # Copy platform plugins
+              mkdir -p ${{github.workspace}}/deploy/windows/platforms
+              cp $QT_LIB_DIR/../plugins/platforms/qwindows.dll ${{github.workspace}}/deploy/windows/platforms/ || echo "qwindows.dll not found"
+            fi
+          fi
           
           # Create a zip archive
           cd ${{github.workspace}}/deploy
           zip -r ../USB-Power-OSD-Windows.zip windows/
-
-      # ... existing macOS steps remain the same ...
 
       - name: Upload Windows artifacts
         if: matrix.name == 'windows-cross'
@@ -216,7 +242,12 @@ jobs:
           path: ${{github.workspace}}/USB-Power-OSD-Windows.zip
           if-no-files-found: error
 
-      # ... existing code ...
+      - name: Debug build output
+        run: |
+          echo "Listing build directory contents:"
+          ls -la ${{github.workspace}}/build/
+          echo "Finding executable by name:"
+          find ${{github.workspace}}/build -name "USB*" -type f -executable
 
       - name: Upload Linux artifacts
         if: matrix.name == 'ubuntu-22.04'
@@ -225,13 +256,13 @@ jobs:
           name: linux-build
           path: ${{github.workspace}}/USB-Power-OSD-Linux.tar.gz
           if-no-files-found: error
+
       - name: Sign the macOS application
         if: matrix.os == 'macos-latest'
         run: |
           echo "Signing with Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
           /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
 
-      # macOS notarization (optional but recommended)
       - name: Notarize the macOS application
         if: matrix.os == 'macos-latest'
         env:
@@ -265,21 +296,4 @@ jobs:
         with:
           name: macos-build
           path: ${{github.workspace}}/build/USB Power OSD.app
-          if-no-files-found: error
-
-      # For Linux
-      - name: Debug build output
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          echo "Listing build directory contents:"
-          ls -la ${{github.workspace}}/build/
-          echo "Finding executable by name:"
-          find ${{github.workspace}}/build -name "USB*" -type f -executable
-
-      - name: Upload Linux artifacts
-        if: matrix.name == 'ubuntu-22.04'
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-build
-          path: "USB_Power_OSD-*.AppImage"
           if-no-files-found: error
