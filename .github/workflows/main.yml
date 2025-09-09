@@ -152,6 +152,11 @@ jobs:
       - name: Build
         run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
 
+      - name: Debug build output
+        run: |
+          echo "Listing build directory contents:"
+          ls -lRa ${{github.workspace}}/build/
+
       # Linux deployment - bundle Qt libraries
       - name: Deploy Qt libraries (Linux)
         if: matrix.name == 'ubuntu-22.04'
@@ -241,11 +246,6 @@ jobs:
           name: windows-build
           path: ${{github.workspace}}/USB-Power-OSD-Windows.zip
           if-no-files-found: error
-
-      - name: Debug build output
-        run: |
-          echo "Listing build directory contents:"
-          ls -lRa ${{github.workspace}}/build/
 
       - name: Upload Linux artifacts
         if: matrix.name == 'ubuntu-22.04'
