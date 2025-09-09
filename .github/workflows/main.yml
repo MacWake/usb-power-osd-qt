@@ -245,9 +245,7 @@ jobs:
       - name: Debug build output
         run: |
           echo "Listing build directory contents:"
-          ls -la ${{github.workspace}}/build/
-          echo "Finding executable by name:"
-          find ${{github.workspace}}/build -name "USB*" -type f -executable
+          ls -lRa ${{github.workspace}}/build/
 
       - name: Upload Linux artifacts
         if: matrix.name == 'ubuntu-22.04'
