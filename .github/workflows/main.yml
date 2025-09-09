@@ -35,14 +35,15 @@ jobs:
 
       # Install Qt for all platforms
       - name: Install Qt
-        uses: jurplel/install-qt-action@v3
+        uses: jurplel/install-qt-action@v4
         with:
-          version: '6.5.0'
-          host: ${{ matrix.os == 'windows-cross' && 'windows' || matrix.os == 'macos-latest' && 'mac' || 'linux' }}
+          version: '6.5.3'
+          host: ${{ matrix.name == 'windows-cross' && 'windows' || matrix.name == 'macos-latest' && 'mac' || 'linux' }}
           target: 'desktop'
-          arch: ${{ matrix.os == 'windows-cross' && 'win64_msvc2019_64' || matrix.os == 'macos-latest' && 'clang_64' || 'gcc_64' }}
+          arch: ${{ matrix.name == 'windows-cross' && 'win64_msvc2019_64' || matrix.name == 'macos-latest' && 'clang_64' || 'gcc_64' }}
           modules: 'qtserialport qtconnectivity'
-          setup-python: true
+          setup-python: 'false'
+          cache: true
 
       # Install additional Linux dependencies if needed
       - name: Install additional Linux dependencies
