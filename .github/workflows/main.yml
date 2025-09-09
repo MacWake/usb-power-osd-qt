@@ -153,5 +153,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: ${{github.workspace}}/build/USB Power OSD
+          path: ${{github.workspace}}/build/usb-power-osd
           if-no-files-found: error
