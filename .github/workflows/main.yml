@@ -9,21 +9,24 @@ on:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Build on ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-22.04, macos-latest, windows-cross ]
-        build_type: [ Release ]
         include:
-          - os: windows-cross
+          - name: ubuntu-22.04
+            runs-on: ubuntu-22.04
             generator: "Unix Makefiles"
+            build_type: Release
+          - name: macos-latest
+            runs-on: macos-latest
+            generator: "Unix Makefiles"
+            build_type: Release
+          - name: windows-cross
             runs-on: ubuntu-latest
-          - os: ubuntu-22.04
             generator: "Unix Makefiles"
-          - os: macos-latest
-            generator: "Unix Makefiles"
+            build_type: Release
 
     steps:
       - uses: actions/checkout@v4
