@@ -92,12 +92,74 @@ jobs:
       - name: Build
         run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
 
-      # After the build step but before code signing, add:
-      - name: Deploy and Sign Qt dependencies
-        if: matrix.os == 'macos-latest'
+      # Linux deployment - bundle Qt libraries
+      - name: Deploy Qt libraries (Linux)
+        if: matrix.name == 'ubuntu-22.04'
         run: |
-          echo "Deploying and signing Qt frameworks to app bundle"
-          macdeployqt "${{github.workspace}}/build/USB Power OSD.app" -always-overwrite -verbose=2 -sign-for-notarization="Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
+          # Install linuxdeployqt
+          wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
+          chmod a+x linuxdeployqt-continuous-x86_64.AppImage
+          
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          cp "${{github.workspace}}/build/usb-power-osd" AppDir/usr/bin/
+          
+          # Create desktop file
+          cat > AppDir/usb-power-osd.desktop << 'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=USB-C Power OSD
+          Exec=usb-power-osd
+          Icon=usb-power-osd
+          Categories=Utility;
+          EOF
+          
+          # Copy icon (assuming you have one)
+          cp usb-power-osd.png AppDir/usb-power-osd.png || echo "No icon found, skipping"
+          
+          # Deploy Qt libraries
+          ./linuxdeployqt-continuous-x86_64.AppImage AppDir/usb-power-osd.desktop -appimage -verbose=2
+
+      # Windows deployment - bundle Qt libraries
+      - name: Deploy Qt libraries (Windows)
+        if: matrix.name == 'windows-cross'
+        run: |
+          # Create deployment directory
+          mkdir -p ${{github.workspace}}/deploy/windows
+          
+          # Copy the executable
+          cp ${{github.workspace}}/build/usb-power-osd.exe ${{github.workspace}}/deploy/windows/
+          
+          # Copy MinGW runtime libraries
+          cp /usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll ${{github.workspace}}/deploy/windows/ || echo "libwinpthread-1.dll not found"
+          cp /usr/lib/gcc/x86_64-w64-mingw32/*/libgcc_s_seh-1.dll ${{github.workspace}}/deploy/windows/ || echo "libgcc_s_seh-1.dll not found"
+          cp /usr/lib/gcc/x86_64-w64-mingw32/*/libstdc++-6.dll ${{github.workspace}}/deploy/windows/ || echo "libstdc++-6.dll not found"
+          
+          # Copy Qt libraries (you'll need to identify which Qt libs your app uses)
+          # These paths may vary depending on how Qt was installed by install-qt-action
+          QT_DIR=$(find $RUNNER_WORKSPACE -name "Qt" -type d | head -1)
+          if [ -n "$QT_DIR" ]; then
+            QT_BIN_DIR=$(find $QT_DIR -path "*/6.5.0/*/bin" -type d | grep mingw | head -1)
+            QT_LIB_DIR=$(find $QT_DIR -path "*/6.5.0/*/lib" -type d | grep mingw | head -1)
+            
+            if [ -n "$QT_BIN_DIR" ]; then
+              echo "Found Qt bin directory: $QT_BIN_DIR"
+              cp $QT_BIN_DIR/Qt6Core.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Core.dll not found"
+              cp $QT_BIN_DIR/Qt6Gui.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Gui.dll not found"
+              cp $QT_BIN_DIR/Qt6Widgets.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Widgets.dll not found"
+              cp $QT_BIN_DIR/Qt6Bluetooth.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Bluetooth.dll not found"
+              cp $QT_BIN_DIR/Qt6SerialPort.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6SerialPort.dll not found"
+              cp $QT_BIN_DIR/Qt6Network.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Network.dll not found"
+              
+              # Copy platform plugins
+              mkdir -p ${{github.workspace}}/deploy/windows/platforms
+              cp $QT_LIB_DIR/../plugins/platforms/qwindows.dll ${{github.workspace}}/deploy/windows/platforms/ || echo "qwindows.dll not found"
+            fi
+          fi
+          
+          # Create a zip archive
+          cd ${{github.workspace}}/deploy
+          zip -r ../USB-Power-OSD-Windows.zip windows/
 
       # macOS code signing
       - name: Sign the macOS application
@@ -127,11 +189,11 @@ jobs:
           xcrun stapler staple "${{github.workspace}}/build/USB Power OSD.app"
 
       - name: Upload Windows artifacts
-        if: matrix.os == 'windows-cross'
+        if: matrix.name == 'windows-cross'
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: ${{github.workspace}}/build/Release/USB Power OSD.exe
+          path: ${{github.workspace}}/USB-Power-OSD-Windows.zip
           if-no-files-found: error
 
       - name: Upload macOS artifacts
@@ -152,9 +214,9 @@ jobs:
           find ${{github.workspace}}/build -name "USB*" -type f -executable
 
       - name: Upload Linux artifacts
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.name == 'ubuntu-22.04'
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: "${{github.workspace}}/build/USB Power OSD"
+          path: "USB-C_Power_OSD-*.AppImage"
           if-no-files-found: error
