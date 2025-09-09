@@ -58,7 +58,7 @@ set(RESOURCES
         resources/resources.qrc
 )
 
-set(EXECUTABLE_NAME "USB-C Power OSD")
+set(EXECUTABLE_NAME "USB Power OSD")
 
 # Create executable
 qt_add_executable(usb-power-osd ${SOURCES} ${HEADERS} ${UI_FILES} ${RESOURCES})
