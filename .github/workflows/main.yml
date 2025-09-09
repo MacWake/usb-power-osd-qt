@@ -113,6 +113,19 @@ jobs:
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           keychain-password: ${{ github.run_id }}
 
+      # Alternative: Use Linux Qt with MinGW for cross-compilation
+      - name: Install Qt for Windows cross-compilation (alternative)
+        if: matrix.name == 'windows-cross'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.5.3'
+          host: 'linux'  # Use Linux Qt installation
+          target: 'desktop'
+          arch: 'gcc_64'
+          modules: 'qtserialport qtconnectivity'
+          setup-python: 'false'
+          cache: true
+
       - name: Configure CMake for Windows
         if: matrix.os == 'windows-cross'
         run: |
@@ -125,7 +138,8 @@ jobs:
           -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
           -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
           -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++ -static" \
-          -DCMAKE_CXX_FLAGS="-DSTATIC_BUILD"
+          -DCMAKE_CXX_FLAGS="-DSTATIC_BUILD" \
+          -DCMAKE_PREFIX_PATH="$Qt6_DIR"
 
       - name: Configure CMake (non-Windows)
         if: matrix.os != 'windows-cross'
@@ -149,13 +163,13 @@ jobs:
           
           # Create AppDir structure
           mkdir -p AppDir/usr/bin
-          cp "${{github.workspace}}/build/USB-C Power OSD" AppDir/usr/bin/
+          cp "${{github.workspace}}/build/USB Power OSD" AppDir/usr/bin/
           
           # Create desktop file
           cat > AppDir/usb-power-osd.desktop << 'EOF'
           [Desktop Entry]
           Type=Application
-          Name=USB-C Power OSD
+          Name=USB Power OSD
           Exec=usb-power-osd
           Icon=usb-power-osd
           Categories=Utility;
@@ -265,5 +279,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: "USB-C_Power_OSD-*.AppImage"
+          path: "USB_Power_OSD-*.AppImage"
           if-no-files-found: error
