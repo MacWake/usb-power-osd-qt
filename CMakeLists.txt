@@ -79,6 +79,7 @@ target_include_directories(usb-power-osd PRIVATE src)
 if (WIN32)
     set_target_properties(usb-power-osd PROPERTIES
             WIN32_EXECUTABLE TRUE
+            OUTPUT_NAME ${EXECUTABLE_NAME}
     )
 endif ()
 
@@ -86,6 +87,14 @@ if (APPLE)
     set_target_properties(usb-power-osd PROPERTIES
             MACOSX_BUNDLE TRUE
             MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist
+            OUTPUT_NAME ${EXECUTABLE_NAME}
+    )
+endif ()
+
+# For other platforms (Linux, etc.)
+if (NOT WIN32 AND NOT APPLE)
+    set_target_properties(usb-power-osd PROPERTIES
+            OUTPUT_NAME ${EXECUTABLE_NAME}
     )
 endif ()
 
