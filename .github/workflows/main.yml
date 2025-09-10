@@ -44,47 +44,12 @@ jobs:
         with:
           fetch-depth: 0
 
-#      # Install Qt for other platforms
-#      - name: Install Qt (non-macOS)
-#        if: matrix.name != 'macos-latest'
-#        uses: jurplel/install-qt-action@v4
-#        with:
-#          version: '6.5.3'
-#          host: ${{ matrix.name == 'windows-cross' && 'windows' || 'linux' }}
-#          target: 'desktop'
-#          arch: ${{ matrix.name == 'windows-cross' && 'win64_mingw' || 'gcc_64' }}
-#          modules: 'qtserialport qtconnectivity'
-#          setup-python: 'false'
-#          cache: true
-#          tools: ${{ matrix.name == 'windows-cross' && 'tools_mingw90' || '' }}
-
-#      # Fix Qt tools permissions for MinGW cross-compilation
-#      - name: Fix Qt tools permissions (Windows cross-compilation)
-#        if: matrix.name == 'windows-cross'
-#        run: |
-#          # Find and fix permissions for Qt tools
-#          find $RUNNER_WORKSPACE -name "*.exe" -path "*/Qt/*" -exec chmod +x {} \;
-#
-#          # Specifically find and test moc
-#          MOC_PATH=$(find $RUNNER_WORKSPACE -name "moc.exe" -path "*/Qt/*" | grep mingw | head -1)
-#          if [ -n "$MOC_PATH" ]; then
-#            echo "Found moc at: $MOC_PATH"
-#            chmod +x "$MOC_PATH"
-#            ls -la "$MOC_PATH"
-#            # Test if we can run it through wine (if available) or just ensure it's executable
-#            file "$MOC_PATH" || echo "file command not available"
-#          else
-#            echo "moc.exe not found in MinGW Qt installation"
-#            echo "Available Qt installations:"
-#            find $RUNNER_WORKSPACE -path "*/Qt/*" -name "bin" -type d
-#          fi
-
       # Install Qt for all platforms
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.5.3'
-          host: 'linux'
+          host: ${{ matrix.name == 'macos-latest' && 'mac' || 'linux' }}
           target: 'desktop'
           arch: ${{ matrix.name == 'macos-latest' && 'clang_64' || 'gcc_64' }}
           modules: 'qtserialport qtconnectivity'
@@ -113,20 +78,8 @@ jobs:
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           keychain-password: ${{ github.run_id }}
 
-      - name: Install Qt for Windows cross-compilation
-        if: matrix.name == 'windows-cross'
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.5.3'
-          host: 'linux'  # Use Linux Qt installation
-          target: 'desktop'
-          arch: 'gcc_64'
-          modules: 'qtserialport qtconnectivity'
-          setup-python: 'false'
-          cache: true
-
       - name: Configure CMake for Windows
-        if: matrix.os == 'windows-cross'
+        if: matrix.name == 'windows-cross'
         run: |
           cmake -B ${{github.workspace}}/build \
           -G "Unix Makefiles" \
@@ -141,7 +94,7 @@ jobs:
           -DCMAKE_PREFIX_PATH="$Qt6_DIR"
 
       - name: Configure CMake (non-Windows)
-        if: matrix.os != 'windows-cross'
+        if: matrix.name != 'windows-cross'
         run: >
           cmake -B ${{github.workspace}}/build 
           -G "${{matrix.generator}}" 
