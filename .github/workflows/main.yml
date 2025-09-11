@@ -66,7 +66,7 @@ jobs:
 
       # Install additional Linux dependencies if needed
       - name: Install additional Linux dependencies
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.name == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0
