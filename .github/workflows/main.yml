@@ -46,7 +46,7 @@ jobs:
         if: matrix.name != 'windows'
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.7.2'
+          version: '6.5.3'
           host: ${{ matrix.name == 'macos-latest' && 'mac' || 'linux' }}
           target: 'desktop'
           arch: ${{ matrix.name == 'macos-latest' && 'clang_64' || 'gcc_64' }}
@@ -112,7 +112,7 @@ jobs:
         if: matrix.name == 'windows'
         run: |
           echo "Listing build directory contents:"
-          dir /s ${{github.workspace}}/build/
+          dir -s ${{github.workspace}}/build/
 
       # Linux deployment - bundle Qt libraries
       - name: Deploy Qt libraries (Linux)
