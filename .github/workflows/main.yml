@@ -27,8 +27,7 @@ jobs:
             runs-on: windows-latest
             build_type: Release
 
-    steps:
-      # Workaround for Python environment issue on macOS
+    steps: # Workaround for Python environment issue on macOS
       - name: Setup Python environment (macOS)
         if: matrix.name == 'macos-latest'
         run: |
@@ -62,6 +61,7 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2019_64'   # or 'win64_msvc2022_64'
+          modules: 'qtserialport qtconnectivity'
           cache: true
 
       # Install additional Linux dependencies if needed
@@ -104,7 +104,7 @@ jobs:
           ls -lRa ${{github.workspace}}/build/
 
       - name: Debug build output (Windows)
-        if: matrix.name != 'windows'
+        if: matrix.name == 'windows'
         run: |
           echo "Listing build directory contents:"
           dir /s ${{github.workspace}}/build/
