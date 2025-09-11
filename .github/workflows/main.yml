@@ -55,7 +55,7 @@ jobs:
           setup-python: 'false'
           cache: true
       - name: Install Qt (Windows)
-        if: matrix.name != 'windows'
+        if: matrix.name == 'windows'
         uses: jurplel/install-qt-action@v3
         with:
           version: '6.7.2'   # pick your Qt version
