@@ -23,9 +23,8 @@ jobs:
             runs-on: macos-latest
             generator: "Unix Makefiles"
             build_type: Release
-          - name: windows-cross
-            runs-on: ubuntu-latest
-            generator: "Unix Makefiles"
+          - name: windows
+            runs-on: windows-latest
             build_type: Release
 
     steps:
@@ -44,16 +43,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Install Qt for all platforms
-      - name: Install Qt
+      - name: Install Qt (Unixoid)
+        if: matrix.name != 'windows'
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.5.3'
+          version: '6.7.2'
           host: ${{ matrix.name == 'macos-latest' && 'mac' || 'linux' }}
           target: 'desktop'
           arch: ${{ matrix.name == 'macos-latest' && 'clang_64' || 'gcc_64' }}
           modules: 'qtserialport qtconnectivity'
           setup-python: 'false'
+          cache: true
+      - name: Install Qt (Windows)
+        if: matrix.name != 'windows'
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.7.2'   # pick your Qt version
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2019_64'   # or 'win64_msvc2022_64'
           cache: true
 
       # Install additional Linux dependencies if needed
@@ -62,12 +70,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0
-
-      - name: Install MinGW and dependencies
-        if: matrix.os == 'windows-cross'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mingw-w64 cmake zip
 
       # macOS code signing setup
       - name: Import Code-Signing Certificates
@@ -79,22 +81,14 @@ jobs:
           keychain-password: ${{ github.run_id }}
 
       - name: Configure CMake for Windows
-        if: matrix.name == 'windows-cross'
+        if: matrix.name == 'windows'
         run: |
-          cmake -B ${{github.workspace}}/build \
-          -G "Unix Makefiles" \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_SYSTEM_NAME=Windows \
-          -DCMAKE_CROSSCOMPILING=TRUE \
-          -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
-          -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
-          -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
-          -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++ -static" \
-          -DCMAKE_CXX_FLAGS="-DSTATIC_BUILD" \
-          -DCMAKE_PREFIX_PATH="$Qt6_DIR"
+          cmake -B build -S . 
+          -G "Ninja" 
+          -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
 
       - name: Configure CMake (non-Windows)
-        if: matrix.name != 'windows-cross'
+        if: matrix.name != 'windows'
         run: >
           cmake -B ${{github.workspace}}/build 
           -G "${{matrix.generator}}" 
@@ -105,10 +99,17 @@ jobs:
       - name: Build
         run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
 
-      - name: Debug build output
+      - name: Debug build output (Unixoid)
+        if: matrix.name != 'windows'
         run: |
           echo "Listing build directory contents:"
           ls -lRa ${{github.workspace}}/build/
+
+      - name: Debug build output (Windows)
+        if: matrix.name != 'windows'
+        run: |
+          echo "Listing build directory contents:"
+          dir /s ${{github.workspace}}/build/
 
       # Linux deployment - bundle Qt libraries
       - name: Deploy Qt libraries (Linux)
@@ -153,47 +154,18 @@ jobs:
 
       # Windows deployment - bundle Qt libraries
       - name: Deploy Qt libraries (Windows)
-        if: matrix.name == 'windows-cross'
+        if: matrix.name == 'windows'
         run: |
           # Create deployment directory
-          mkdir -p ${{github.workspace}}/deploy/windows
-          
-          # Copy the executable
-          cp "${{github.workspace}}/build/USB Power OSD.exe" ${{github.workspace}}/deploy/windows/
-          
-          # Copy MinGW runtime libraries
-          cp /usr/x86_64-w64-mingw32/lib/libwinpthread-1.dll ${{github.workspace}}/deploy/windows/ || echo "libwinpthread-1.dll not found"
-          cp /usr/lib/gcc/x86_64-w64-mingw32/*/libgcc_s_seh-1.dll ${{github.workspace}}/deploy/windows/ || echo "libgcc_s_seh-1.dll not found"
-          cp /usr/lib/gcc/x86_64-w64-mingw32/*/libstdc++-6.dll ${{github.workspace}}/deploy/windows/ || echo "libstdc++-6.dll not found"
-          
-          # Copy Qt libraries (you'll need to identify which Qt libs your app uses)
-          # These paths may vary depending on how Qt was installed by install-qt-action
-          QT_DIR=$(find $RUNNER_WORKSPACE -name "Qt" -type d | head -1)
-          if [ -n "$QT_DIR" ]; then
-            QT_BIN_DIR=$(find $QT_DIR -path "*/6.5.0/*/bin" -type d | grep mingw | head -1)
-            QT_LIB_DIR=$(find $QT_DIR -path "*/6.5.0/*/lib" -type d | grep mingw | head -1)
-          
-            if [ -n "$QT_BIN_DIR" ]; then
-              echo "Found Qt bin directory: $QT_BIN_DIR"
-              cp $QT_BIN_DIR/Qt6Core.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Core.dll not found"
-              cp $QT_BIN_DIR/Qt6Gui.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Gui.dll not found"
-              cp $QT_BIN_DIR/Qt6Widgets.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Widgets.dll not found"
-              cp $QT_BIN_DIR/Qt6Bluetooth.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Bluetooth.dll not found"
-              cp $QT_BIN_DIR/Qt6SerialPort.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6SerialPort.dll not found"
-              cp $QT_BIN_DIR/Qt6Network.dll ${{github.workspace}}/deploy/windows/ || echo "Qt6Network.dll not found"
-          
-              # Copy platform plugins
-              mkdir -p ${{github.workspace}}/deploy/windows/platforms
-              cp $QT_LIB_DIR/../plugins/platforms/qwindows.dll ${{github.workspace}}/deploy/windows/platforms/ || echo "qwindows.dll not found"
-            fi
-          fi
-          
+          mkdir -p ${{github.workspace}}\deplo\windows
+          copy "build\USB Power OSD.exe" "${{github.workspace}}\deploy\windows"
+          windeployqt --release --no-translations --dir "${{github.workspace}}\deploy\windows" "${{github.workspace}}\deploy\windows\USB Power OSD.exe"
           # Create a zip archive
-          cd ${{github.workspace}}/deploy
-          zip -r ../USB-Power-OSD-Windows.zip windows/
+          cd ${{github.workspace}}\deploy
+          powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows.zip"
 
       - name: Upload Windows artifacts
-        if: matrix.name == 'windows-cross'
+        if: matrix.name == 'windows'
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
@@ -232,14 +204,6 @@ jobs:
           
           # Staple the notarization ticket
           xcrun stapler staple "${{github.workspace}}/build/USB Power OSD.app"
-
-      - name: Upload Windows artifacts
-        if: matrix.name == 'windows-cross'
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-build
-          path: ${{github.workspace}}/USB-Power-OSD-Windows.zip
-          if-no-files-found: error
 
       - name: Upload macOS artifacts
         if: matrix.os == 'macos-latest'
