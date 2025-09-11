@@ -83,9 +83,7 @@ jobs:
       - name: Configure CMake for Windows
         if: matrix.name == 'windows'
         run: |
-          cmake -B build -S . 
-          -G "Ninja" 
-          -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+          cmake -B build -S . -G "Ninja" -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
 
       - name: Configure CMake (non-Windows)
         if: matrix.name != 'windows'
