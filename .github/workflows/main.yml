@@ -243,3 +243,35 @@ jobs:
           name: macos-build
           path: ${{github.workspace}}/build/USB Power OSD.app
           if-no-files-found: error
+      # Create dmg
+      - name: Create dmg
+        if: matrix.name == 'macos-latest'
+        run: |
+          hdiutil create -volname "MacWake USB Power OSD" -srcfolder "build/USB Power OSD.app" "build/Macwake USB Power.dmg"
+
+      # Notarize dmg
+      - name: Notarize app
+        if: matrix.name == 'macos-latest'
+        run: |
+          xcrun notarytool submit "build/Macwake USB Power.dmg" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_PASSWORD" \
+            --wait
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+
+      # Staple notarization ticket
+      - name: Staple app
+        if: matrix.name == 'macos-latest'
+        run: |
+          xcrun stapler staple "build/Macwake USB Power.dmg"
+
+      - name: Upload artifact
+        if: matrix.name == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS Application Image
+          path: "build/Macwake USB Power.dmg"
