@@ -214,7 +214,7 @@ jobs:
           
           # Verify the signature
           echo "Verifying signature..."
-          /usr/bin/codesign --verify --deep --strict --verbose=2 "${{github.workspace}}/build/USB Power OSD.a
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "${{github.workspace}}/build/USB Power OSD.app"
           /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
 
       - name: Notarize the macOS application
