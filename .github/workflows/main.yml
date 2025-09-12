@@ -196,26 +196,26 @@ jobs:
       - name: Sign the macOS application
         if: matrix.name == 'macos-latest'
         run: |
-          echo "Signing with Developer ID Application: ${{ vars.APPLE_TEAM_ID }}"
+          echo "Signing with Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
           # First, sign all Qt frameworks and libraries inside the app
           echo "Signing frameworks and libraries..."
           find "${{github.workspace}}/build/USB Power OSD.app" -name "*.dylib" -o -name "*.framework" | while read file; do
             echo "Signing: $file"
-            /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_TEAM_ID }}" --verbose "$file" || echo "Failed to sign $file"
+            /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "$file" || echo "Failed to sign $file"
           done
           
           # Then sign the main executable
           echo "Signing main executable..."
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_TEAM_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app/Contents/MacOS/USB Power OSD"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app/Contents/MacOS/USB Power OSD"
           
           # Finally, sign the entire app bundle
           echo "Signing app bundle..."
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_TEAM_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
           
           # Verify the signature
           echo "Verifying signature..."
           /usr/bin/codesign --verify --deep --strict --verbose=2 "${{github.workspace}}/build/USB Power OSD.a
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_TEAM_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
 
       - name: Notarize the macOS application
         if: matrix.name == 'macos-latest'
