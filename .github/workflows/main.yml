@@ -74,7 +74,7 @@ jobs:
 
       # macOS code signing setup
       - name: Import Code-Signing Certificates
-        if: matrix.os == 'macos-latest'
+        if: matrix.name == 'macos-latest'
         uses: Apple-Actions/import-codesign-certs@v2
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
@@ -97,7 +97,7 @@ jobs:
           -G "${{matrix.generator}}" 
           -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
           -DCMAKE_PREFIX_PATH=${{env.Qt6_DIR}}
-          ${{ matrix.os == 'macos-latest' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
+          ${{ matrix.name == 'macos-latest' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
