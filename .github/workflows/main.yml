@@ -186,7 +186,7 @@ jobs:
       - name: Sign the macOS application
         if: matrix.name == 'macos-latest'
         run: |
-          echo "Signing with Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
+          echo "Signing with Developer ID Application: ${{ vars.APPLE_TEAM_ID }}"
           /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
 
       - name: Notarize the macOS application
