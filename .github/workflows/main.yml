@@ -161,7 +161,7 @@ jobs:
         run: |
           # Create deployment directory
           mkdir -p ${{github.workspace}}\deploy\windows
-          copy "\build\Release\USB Power OSD.exe" "${{github.workspace}}\deploy\windows"
+          copy "${{github.workspace}}\build\Release\USB Power OSD.exe" "${{github.workspace}}\deploy\windows"
           windeployqt --release --no-translations --dir "${{github.workspace}}\deploy\windows" "${{github.workspace}}\deploy\windows\USB Power OSD.exe"
           # Create a zip archive
           cd ${{github.workspace}}\deploy
