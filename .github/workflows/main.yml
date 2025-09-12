@@ -184,13 +184,13 @@ jobs:
           if-no-files-found: error
 
       - name: Sign the macOS application
-        if: matrix.os == 'macos-latest'
+        if: matrix.name == 'macos-latest'
         run: |
           echo "Signing with Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
           /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
 
       - name: Notarize the macOS application
-        if: matrix.os == 'macos-latest'
+        if: matrix.name == 'macos-latest'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
@@ -209,7 +209,7 @@ jobs:
           xcrun stapler staple "${{github.workspace}}/build/USB Power OSD.app"
 
       - name: Upload macOS artifacts
-        if: matrix.os == 'macos-latest'
+        if: matrix.name == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
