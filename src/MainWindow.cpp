@@ -99,9 +99,9 @@ void MainWindow::hideStatusBar() {
 }
 
 void MainWindow::connectLastDevice(bool reconnecting = false) {
-  qDebug() << "Trying to connect to last device... (reconnect="<<reconnecting<<")";
+  //qDebug() << "Trying to connect to last device... (reconnect="<<reconnecting<<")";
   if (!settings->last_device.isEmpty()) {
-    qDebug() << "Trying to connect to last device " << settings->last_device;
+    //qDebug() << "Trying to connect to last device " << settings->last_device;
     if (this->m_deviceManager->tryConnect(settings->last_device)) {
       if (reconnecting) {
         this->m_reconnect_timer->stop();
@@ -141,6 +141,7 @@ void MainWindow::showDeviceSelectionDialog() {
       this->settings->saveSettings();
     } else if (connectionType ==
                DeviceSelectionDialog::ConnectionType::SerialPort) {
+      //qDebug() << "Selected serial port; stopping/disconnecting ble device";
       m_deviceManager->stopBtScanning();
       QString selectedPort = m_deviceSelectionDialog->getSelectedSerialPort();
       // qDebug() << "Selected serial port: " << selectedPort;
@@ -148,9 +149,12 @@ void MainWindow::showDeviceSelectionDialog() {
       this->settings->saveSettings();
       statusBar()->showMessage(
           QString("Connecting to %1...").arg(selectedPort));
+        //qDebug() << "tryConnect() to " << selectedPort;
       if (!m_deviceManager->tryConnect(selectedPort)) {
+        //qDebug() << "tryConnect() failed for " << selectedPort;
         statusBar()->showMessage("Failed to connect to " + selectedPort);
       } else {
+        //qDebug() << "tryConnect() succeeded for " << selectedPort;
         return;
       }
     } else {
@@ -159,10 +163,10 @@ void MainWindow::showDeviceSelectionDialog() {
     }
   } else {
     // User cancelled
-    statusBar()->showMessage("No device selected.");
+    //statusBar()->showMessage("No device selected.");
     // QTimer::singleShot(2000, QApplication::instance(), &QApplication::quit);
   }
-  QTimer::singleShot(100, [this] { MainWindow::connectLastDevice(false); });
+  //QTimer::singleShot(100, [this] { MainWindow::connectLastDevice(false); });
 }
 
 // ReSharper disable CppDFAMemoryLeak

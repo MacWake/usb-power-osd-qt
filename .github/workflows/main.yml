@@ -122,13 +122,13 @@ jobs:
           mkdir -p ${{github.workspace}}/deploy/linux
           
           # Copy the executable
-          cp "${{github.workspace}}/build/USB Power OSD" "${{github.workspace}}/deploy/linux/"
+          cp "${{github.workspace}}/build/USB-Power-OSD" "${{github.workspace}}/deploy/linux/"
           
           # Copy Qt libraries
           mkdir -p ${{github.workspace}}/deploy/linux/lib
           
           # Find and copy Qt libraries that the executable depends on
-          ldd "${{github.workspace}}/deploy/linux/USB Power OSD" 2>/dev/null | grep -i qt6 | awk '{print $3}' | while read lib; do
+          ldd "${{github.workspace}}/deploy/linux/USB-Power-OSD" 2>/dev/null | grep -i qt6 | awk '{print $3}' | while read lib; do
             if [ -f "$lib" ]; then
               cp "$lib" "${{github.workspace}}/deploy/linux/lib/"
             fi
@@ -146,7 +146,7 @@ jobs:
           SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
           export LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"
           export QT_PLUGIN_PATH="$SCRIPT_DIR/plugins"
-          exec "$SCRIPT_DIR/USB Power OSD" "$@"
+          exec "$SCRIPT_DIR/USB-Power-OSD" "$@"
           EOF
           
           chmod +x "${{github.workspace}}/deploy/linux/usb-power-osd.sh"
@@ -161,8 +161,8 @@ jobs:
         run: |
           # Create deployment directory
           mkdir -p ${{github.workspace}}\deploy\windows
-          copy "${{github.workspace}}\build\Release\USB Power OSD.exe" "${{github.workspace}}\deploy\windows"
-          windeployqt --release --no-translations --dir "${{github.workspace}}\deploy\windows" "${{github.workspace}}\deploy\windows\USB Power OSD.exe"
+          copy "${{github.workspace}}\build\Release\USB-Power-OSD.exe" "${{github.workspace}}\deploy\windows"
+          windeployqt --release --no-translations --dir "${{github.workspace}}\deploy\windows" "${{github.workspace}}\deploy\windows\USB-Power-OSD.exe"
           # Create a zip archive
           cd ${{github.workspace}}\deploy
           powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows.zip"
@@ -187,67 +187,59 @@ jobs:
         if: matrix.name == 'macos-latest'
         run: |
           # Use macdeployqt to bundle Qt libraries into the app
-          macdeployqt "${{github.workspace}}/build/USB Power OSD.app" -verbose=2
+          macdeployqt "${{github.workspace}}/build/USB-Power-OSD.app" -verbose=1
           
           # Verify the app structure after deployment
           echo "App structure after macdeployqt:"
-          ls -la "${{github.workspace}}/build/USB Power OSD.app/Contents/"
+          ls -la "${{github.workspace}}/build/USB-Power-OSD.app/Contents/"
 
       - name: Sign the macOS application
         if: matrix.name == 'macos-latest'
         run: |
           echo "Signing with Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
-          # First, sign all Qt frameworks and libraries inside the app
-          echo "Signing frameworks and libraries..."
-          find "${{github.workspace}}/build/USB Power OSD.app" -name "*.dylib" -o -name "*.framework" | while read file; do
-            echo "Signing: $file"
-            /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "$file" || echo "Failed to sign $file"
-          done
-          
-          # Then sign the main executable
           echo "Signing main executable..."
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app/Contents/MacOS/USB Power OSD"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB-Power-OSD.app/Contents/MacOS/USB-Power-OSD"
           
           # Finally, sign the entire app bundle
           echo "Signing app bundle..."
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose --deep "${{github.workspace}}/build/USB-Power-OSD.app"
           
           # Verify the signature
           echo "Verifying signature..."
-          /usr/bin/codesign --verify --deep --strict --verbose=2 "${{github.workspace}}/build/USB Power OSD.app"
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "${{github.workspace}}/build/USB-Power-OSD.app"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB-Power-OSD.app"
 
       - name: Notarize the macOS application
-        if: matrix.name == 'macos-latestXX'
+        if: matrix.name == 'macos-latest'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
         run: |
           # Create a ZIP archive of the app
-          ditto -c -k --keepParent "${{github.workspace}}/build/USB Power OSD.app" "${{github.workspace}}/build/USB Power OSD.zip"
+          ditto -c -k --keepParent "${{github.workspace}}/build/USB-Power-OSD.app" "${{github.workspace}}/build/USB-Power-OSD.zip"
           
           # Notarize the app
-          xcrun notarytool submit "${{github.workspace}}/build/USB Power OSD.zip" \
+          xcrun notarytool submit "${{github.workspace}}/build/USB-Power-OSD.zip" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_ID_PASSWORD" \
             --team-id "${{ vars.APPLE_TEAM_ID }}" \
             --wait
           
           # Staple the notarization ticket
-          xcrun stapler staple "${{github.workspace}}/build/USB Power OSD.app"
+          xcrun stapler staple "${{github.workspace}}/build/USB-Power-OSD.app"
 
       - name: Upload macOS artifacts
         if: matrix.name == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: ${{github.workspace}}/build/USB Power OSD.app
+          path: ${{github.workspace}}/build/USB-Power-OSD.app
           if-no-files-found: error
       # Create dmg
       - name: Create dmg
         if: matrix.name == 'macos-latest'
         run: |
-          hdiutil create -volname "MacWake USB Power OSD" -srcfolder "build/USB Power OSD.app" "build/Macwake USB Power.dmg"
+          hdiutil create -volname "MacWake USB Power OSD" -srcfolder "build/USB-Power-OSD.app" "build/Macwake USB Power.dmg"
 
       # Notarize dmg
       - name: Notarize app

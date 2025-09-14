@@ -106,8 +106,6 @@ void OsdSettings::saveSettings() {
   setValue("device/last", this->last_device);
 
   // Ensure settings are written to disk
-  qDebug() << "Last device:"<<this->last_device;
-  std::cerr << "Settings saved." << std::endl;
   sync();
 }
 

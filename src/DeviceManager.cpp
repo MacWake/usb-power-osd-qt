@@ -43,6 +43,7 @@ void DeviceManager::startBtScanning() {
 
 void DeviceManager::stopBtScanning() {
   m_bluetoothManager->stopScanning();
+  m_bluetoothManager->disconnect();
   // m_serialManager->stopScanning();
 }
 

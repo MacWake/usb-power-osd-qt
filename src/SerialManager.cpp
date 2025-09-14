@@ -108,7 +108,7 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
 }
 
 void SerialManager::disconnect() {
-  qDebug() << "Disconnecting from serial device";
+  //qDebug() << "Disconnecting from serial device";
   try {
     if (m_serialPort->isOpen()) {
       m_serialPort->close();
@@ -209,7 +209,7 @@ bool SerialManager::checkPLDProtocol() {
   // qDebug() << "Checking for PLD protocol...";
 
   if (!this->waitForLineAvailable(1000)) {
-    std::cerr << "checkPLDProtocol: timeout 1" << std::endl;
+    //std::cerr << "checkPLDProtocol: timeout 1" << std::endl;
     return false;
   }
   QByteArray line = m_serialPort->readLine();
@@ -217,7 +217,7 @@ bool SerialManager::checkPLDProtocol() {
   if (line.size() < 8) {
     // qDebug() << "line size: " << line.size() << " too small, read next line";
     if (!this->waitForLineAvailable(1000)) {
-      std::cerr << "checkPLDProtocol: timeout 2" << std::endl;
+      //std::cerr << "checkPLDProtocol: timeout 2" << std::endl;
       return false;
     }
     line = m_serialPort->readLine();
@@ -242,7 +242,7 @@ bool SerialManager::checkPLDProtocol() {
     // qDebug() << "PLD20 detected (by length)";
     m_protocol = SerialProtocol::PLD20;
   } else {
-    std::cerr << "checkPLDProtocol: Cannot obtain frame type" << std::endl;
+    //std::cerr << "checkPLDProtocol: Cannot obtain frame type" << std::endl;
     return false;
   }
   return true;

@@ -57,7 +57,7 @@ void BluetoothManager::startScanning()
         return;
     }
     m_isActive = true;
-    qDebug() << "Starting Bluetooth scan...";
+    //qDebug() << "Starting Bluetooth scan...";
     m_discoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
     
     if (!m_scanTimer->isActive()) {
@@ -67,7 +67,7 @@ void BluetoothManager::startScanning()
 
 void BluetoothManager::stopScanning()
 {
-    qDebug() << "Stopping Bluetooth scan...";
+    //qDebug() << "Stopping Bluetooth scan...";
     m_isActive = false;
     m_scanTimer->stop();
     if (m_discoveryAgent->isActive()) {
@@ -79,7 +79,7 @@ void BluetoothManager::disconnect()
 {
     stopScanning();
     if (m_controller) {
-        qDebug() << "Disconnecting from BLE device...";
+        //qDebug() << "Disconnecting from BLE device...";
         m_controller->disconnectFromDevice();
         m_targetDevice = QBluetoothDeviceInfo();
     }
@@ -92,7 +92,7 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 {
     // Look for devices with "USB Power" or your specific device name
     QString deviceName = info.name();
-    qDebug() << "Found device:" << deviceName << " -";
+    // qDebug() << "Found device:" << deviceName << " -";
     if (deviceName.contains("MacWake-USBPowerMeter", Qt::CaseInsensitive)) {
         auto deviceMgr = dynamic_cast<DeviceManager*>(this->parent());
         if (!this->m_isActive) {
@@ -108,7 +108,7 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 
 void BluetoothManager::onScanFinished()
 {
-    qDebug() << "Bluetooth scan finished";
+    //qDebug() << "Bluetooth scan finished";
     if (!m_isConnected && m_targetDevice.isValid()) {
         qDebug() << "Connecting to target device " << m_targetDevice.name();
         connectToDevice(m_targetDevice);
@@ -155,7 +155,7 @@ void BluetoothManager::onControllerDisconnected()
     emit deviceDisconnected();
     
     // Restart scanning
-    QTimer::singleShot(2000, this, &BluetoothManager::startScanning);
+    //QTimer::singleShot(2000, this, &BluetoothManager::startScanning);
 }
 
 void BluetoothManager::onServiceDiscovered(const QBluetoothUuid &uuid)
