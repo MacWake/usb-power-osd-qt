@@ -197,12 +197,8 @@ jobs:
         if: matrix.name == 'macos-latest'
         run: |
           echo "Signing with Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
-#          echo "Signing main executable..."
-#          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB-Power-OSD.app/Contents/MacOS/USB-Power-OSD"
-
-          # Finally, sign the entire app bundle
           echo "Signing app bundle..."
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose --deep "${{github.workspace}}/build/USB-Power-OSD.app"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --deep --verbose "${{github.workspace}}/build/USB-Power-OSD.app"
           
           # Verify the signature
           echo "Verifying signature..."
