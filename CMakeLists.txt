@@ -68,10 +68,6 @@ set(HEADERS
         src/SettingsDialog.h
 )
 
-set(UI_FILES
-        ui/Settings.ui
-)
-
 set(RESOURCES
         resources/resources.qrc
 )
