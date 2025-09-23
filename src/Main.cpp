@@ -14,7 +14,10 @@ int main(int argc, char *argv[]) {
   // Set application icon
   app.setWindowIcon(QIcon(":/icons/app-icon.png"));
 
-  MainWindow window;
+    auto settings = new OsdSettings("MacWake", "USB Display", nullptr);
+    settings->init();
+
+  MainWindow window(settings, nullptr);
   window.show();
 
   return app.exec();

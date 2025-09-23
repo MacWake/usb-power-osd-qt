@@ -23,13 +23,16 @@ class MainWindow : public QMainWindow {
 
 public:
   void tryConnectLastDevice();
-  explicit MainWindow(QWidget *parent = nullptr);
+  explicit MainWindow(OsdSettings *settings, QWidget *parent = nullptr);
   ~MainWindow() override;
   void startReconnectTimer();
   void showStatusMessage(const QString &message, int hideAfterMs);
 
   // Public getter for settings
   [[nodiscard]] OsdSettings *getSettings() const { return settings; }
+  void onPrimaryFontChanged(const QFont &font);
+  void onSecondaryFontChanged(const QFont &font);
+  void onColorChanged();
 
 private slots:
   void onPowerDataReceived(const PowerData &data);
@@ -41,6 +44,7 @@ private slots:
   void connectLastDevice(bool reconnecting);
   void showDeviceSelectionDialog();
   void resetMeasurementHistory();
+
 
 protected:
   void resizeEvent(QResizeEvent *event) override;
@@ -68,10 +72,8 @@ private:
   QLabel *lblPower;
   QLabel *lblEnergy;
   QLabel *lblMinMaxCurrent;
-  QFont *fntVoltage;
-  QFont *fntCurrent;
-  QFont *fntPower;
-  QFont *fntEnergy;
+  QFont *fntPrimary;
+  QFont *fntSecondary;
 
   CurrentGraph *m_currentGraph;
   QTimer *m_reconnect_timer;

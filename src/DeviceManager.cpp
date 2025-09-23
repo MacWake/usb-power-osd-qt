@@ -51,11 +51,13 @@ bool DeviceManager::tryConnect(const QString &portName) {
   //qDebug() << "DeviceManager::tryConnect: Trying to connect to " << portName;
   if (portName.startsWith("ble")) {
     m_bluetoothManager->startScanning();
-  } else if (portName.toLower().contains("usb") || portName.startsWith("COM")) {
+    return true;
+  }
+  if (portName.toLower().contains("usb") || portName.startsWith("COM")) {
     QSerialPortInfo serialPortInfo(portName);
     return m_serialManager->connectSerialDevice(serialPortInfo);
   } else {
-    //qDebug() << "DeviceManager::tryConnect: Unknown port type: " << portName;
+    // qDebug() << "DeviceManager::tryConnect: Unknown port type: " << portName;
     return false;
   }
   return false;

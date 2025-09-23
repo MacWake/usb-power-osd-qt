@@ -1,144 +1,152 @@
+// ReSharper disable CppDFAMemoryLeak
 #include "SettingsDialog.h"
+#include "CurrentGraph.h"
+#include "MainWindow.h"
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QFontDialog>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QSettings>
-#include <QSlider>
 #include <QSpinBox>
-#include <QVBoxLayout>
+#include <QPlainTextEdit>
+#include <QColorDialog>
 
-SettingsDialog::SettingsDialog(QWidget *parent)
-    : QDialog(parent)
-    , m_settings(new QSettings(this))
-{
-    setupUI();
-    loadSettings();
+struct ColorButtonInfo {
+  QString name;
+  QString displayName;
+  QColor* settingsColor;
+  QPushButton** buttonPtr;
+};
+
+SettingsDialog::SettingsDialog(OsdSettings *settings, QWidget *parent) // NOLINT(*-pro-type-member-init)
+    : QDialog(parent), m_settings(settings) {
+  this->m_mainwindow = dynamic_cast<MainWindow *>(parent);
+  setupUI();
+  onColorChanged();
 }
 
-void SettingsDialog::setupUI()
+// ReSharper disable once CppDFAMemoryLeak
+void SettingsDialog::setupUI() // ReSharper disable once CppDFAMemoryLeak
 {
-    setWindowTitle("Settings");
-    setModal(true);
-    resize(400, 300);
-    
-    auto *layout = new QVBoxLayout(this);
-    
-    // OSD Settings
-    auto *osdGroup = new QGroupBox("OSD Display");
-    auto *osdLayout = new QFormLayout(osdGroup);
-    
-    m_autoStartOSDCheck = new QCheckBox("Show OSD on startup");
-    osdLayout->addRow(m_autoStartOSDCheck);
-    
-    m_updateIntervalSpin = new QSpinBox();
-    m_updateIntervalSpin->setRange(100, 5000);
-    m_updateIntervalSpin->setSuffix(" ms");
-    m_updateIntervalSpin->setValue(1000);
-    osdLayout->addRow("Update interval:", m_updateIntervalSpin);
-    
-    auto *opacityLayout = new QHBoxLayout();
-    m_opacitySlider = new QSlider(Qt::Horizontal);
-    m_opacitySlider->setRange(10, 100);
-    m_opacitySlider->setValue(90);
-    m_opacityLabel = new QLabel("90%");
-    opacityLayout->addWidget(m_opacitySlider);
-    opacityLayout->addWidget(m_opacityLabel);
-    osdLayout->addRow("Opacity:", opacityLayout);
-    
-    connect(m_opacitySlider, &QSlider::valueChanged,
-            this, &SettingsDialog::onOpacityChanged);
-    
-    layout->addWidget(osdGroup);
-    
-    // Connection Settings
-    auto *connectionGroup = new QGroupBox("Connection");
-    auto *connectionLayout = new QFormLayout(connectionGroup);
-    
-    m_connectionCombo = new QComboBox();
-    m_connectionCombo->addItems({"Auto", "Bluetooth Preferred", "Serial Preferred"});
-    connectionLayout->addRow("Preference:", m_connectionCombo);
-    
-    m_notificationsCheck = new QCheckBox("Show connection notifications");
-    m_notificationsCheck->setChecked(true);
-    connectionLayout->addRow(m_notificationsCheck);
-    
-    layout->addWidget(connectionGroup);
-    
-    // Dialog buttons
-    auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    connect(buttonBox, &QDialogButtonBox::accepted, this, &SettingsDialog::onAccepted);
-    connect(buttonBox, &QDialogButtonBox::rejected, this, &SettingsDialog::onRejected);
-    
-    layout->addWidget(buttonBox);
+  setWindowTitle("Settings");
+  setModal(true);
+  resize(400, 300);
+
+  auto *layout = new QVBoxLayout(this);
+
+  // OSD Settings
+
+  auto *osdGroup = new QGroupBox("OSD Display");
+  auto *osdLayout = new QFormLayout(osdGroup);
+
+  m_priFontButton = new QPushButton(QString::asprintf("%s %dpt", this->m_settings->primary_font_name.toStdString().c_str(),this->m_settings->primary_font_size), this);
+  connect(m_priFontButton, &QPushButton::clicked, [this] {
+    bool ok;
+    QFont currentFont = QFont(this->m_settings->primary_font_name, this->m_settings->primary_font_size);
+    QFont font =
+        QFontDialog::getFont(&ok, currentFont, this, "Select font", QFontDialog::MonospacedFonts|QFontDialog::DontUseNativeDialog);
+    if (ok) {
+      this->m_settings->primary_font_name = font.family();
+      this->m_settings->primary_font_size = font.pointSize();
+      m_priFontButton->setText(QString::asprintf("%s %dpt", this->m_settings->primary_font_name.toStdString().c_str(),this->m_settings->primary_font_size));
+      this->m_mainwindow->onPrimaryFontChanged(font);
+    }
+  });
+  osdLayout->addRow("Primary Font", m_priFontButton);
+
+    QFont currentFont = QFont(this->m_settings->secondary_font_name, this->m_settings->secondary_font_size);
+  m_secFontButton = new QPushButton(QString::asprintf("%s %dpt", currentFont.family().toStdString().c_str(),currentFont.pointSize()), this);
+  connect(m_secFontButton, &QPushButton::clicked, [this] {
+    bool ok;
+    QFont currentFont = QFont(this->m_settings->secondary_font_name, this->m_settings->secondary_font_size);
+    QFont font =
+        QFontDialog::getFont(&ok, currentFont, this, "Select font", QFontDialog::MonospacedFonts|QFontDialog::DontUseNativeDialog);
+    if (ok) {
+      this->m_settings->secondary_font_name = font.family();
+      this->m_settings->secondary_font_size = font.pointSize();
+      m_secFontButton->setText(QString::asprintf("%s %dpt", this->m_settings->secondary_font_name.toStdString().c_str(),this->m_settings->secondary_font_size));
+      this->m_mainwindow->onSecondaryFontChanged(font);
+    }
+  });
+  osdLayout->addRow("Secondary Font", m_secFontButton);
+
+  m_minCurrent = new QSpinBox();//(QString::asprintf("%0.3f",this->m_settings->min_current), this);
+  m_minCurrent->setRange(1, 100);
+  m_minCurrent->setSuffix(" mA");
+  m_minCurrent->setValue(static_cast<int>(this->m_settings->min_current*1000.0f));
+  osdLayout->addRow("Min. historic current:", m_minCurrent);
+
+  layout->addWidget(osdGroup);
+
+  auto *colorGroup = new QGroupBox("Colors");
+  auto *colorLayout = new QFormLayout(colorGroup);
+
+  std::vector<ColorButtonInfo> colorButtons = {
+    {"background", "Background", &m_settings->color_bg, &m_BackgroundButton},
+    {"text", "Text Color", &m_settings->color_text, &m_TextButton},
+    {"5v", "5V Color", &m_settings->color_5v, &m_5VButton},
+    {"9v", "9V Color", &m_settings->color_9v, &m_9VButton},
+    {"15v", "15V Color", &m_settings->color_15v, &m_15VButton},
+    {"20v", "20V Color", &m_settings->color_20v, &m_20VButton},
+    {"28v", "28V Color", &m_settings->color_28v, &m_28VButton},
+    {"36v", "36V Color", &m_settings->color_36v, &m_36VButton},
+    {"48v", "48V Color", &m_settings->color_48v, &m_48VButton}
+  };
+
+  for (const auto& info : colorButtons) {
+    *info.buttonPtr = createColorButton(info.name, info.displayName, info.settingsColor);
+    colorLayout->addRow(info.displayName, *info.buttonPtr);
+  }
+
+  layout->addWidget(colorGroup);
+
+  // Dialog buttons
+  auto *buttonBox =
+      new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+  connect(buttonBox, &QDialogButtonBox::accepted, this,
+          &SettingsDialog::onAccepted);
+  connect(buttonBox, &QDialogButtonBox::rejected, this,
+          &SettingsDialog::onRejected);
+  layout->addWidget(buttonBox);
 }
 
-void SettingsDialog::loadSettings()
-{
-    m_autoStartOSDCheck->setChecked(m_settings->value("osd/autoStart", false).toBool());
-    m_updateIntervalSpin->setValue(m_settings->value("osd/updateInterval", 1000).toInt());
-    m_opacitySlider->setValue(m_settings->value("osd/opacity", 90).toInt());
-    onOpacityChanged(m_opacitySlider->value());
-    
-    QString connectionPref = m_settings->value("connection/preference", "Auto").toString();
-    m_connectionCombo->setCurrentText(connectionPref);
-    
-    m_notificationsCheck->setChecked(m_settings->value("ui/notifications", true).toBool());
+QPushButton* SettingsDialog::createColorButton(const QString& name, const QString& displayName, QColor* settingsColor) {
+  auto* button = new QPushButton(displayName, this);
+  connect(button, &QPushButton::clicked, [this, settingsColor, displayName] {
+      QColor selected = QColorDialog::getColor(*settingsColor, this, displayName + " Color", QColorDialog::NoEyeDropperButton);
+      if (selected.isValid()) {
+          *settingsColor = selected;
+          this->onColorChanged();
+          this->m_mainwindow->onColorChanged();
+      }
+  });
+  return button;
 }
 
-void SettingsDialog::saveSettings()
-{
-    m_settings->setValue("osd/autoStart", m_autoStartOSDCheck->isChecked());
-    m_settings->setValue("osd/updateInterval", m_updateIntervalSpin->value());
-    m_settings->setValue("osd/opacity", m_opacitySlider->value());
-    m_settings->setValue("connection/preference", m_connectionCombo->currentText());
-    m_settings->setValue("ui/notifications", m_notificationsCheck->isChecked());
-    
-    m_settings->sync();
+void SettingsDialog::onColorChanged() {
+  this->m_BackgroundButton->setStyleSheet("background-color: " + m_settings->color_text.name()+";color: "+this->m_settings->color_bg.name()+";");
+  this->m_TextButton->setStyleSheet("background-color: " + m_settings->color_bg.name()+";color: "+this->m_settings->color_text.name()+";");
+  this->m_5VButton->setStyleSheet("background-color: " + m_settings->color_bg.name()+";color: "+this->m_settings->color_5v.name()+";");
+  this->m_9VButton->setStyleSheet("background-color: " + m_settings->color_bg.name()+";color: "+this->m_settings->color_9v.name()+";");
+  this->m_15VButton->setStyleSheet("background-color: " + m_settings->color_bg.name()+";color: "+this->m_settings->color_15v.name()+";");
+  this->m_20VButton->setStyleSheet("background-color: " + m_settings->color_bg.name()+";color: "+this->m_settings->color_20v.name()+";");
+  this->m_28VButton->setStyleSheet("background-color: " + m_settings->color_bg.name()+";color: "+this->m_settings->color_28v.name()+";");
+  this->m_36VButton->setStyleSheet("background-color: " + m_settings->color_bg.name()+";color: "+this->m_settings->color_36v.name()+";");
+  this->m_48VButton->setStyleSheet("background-color: " + m_settings->color_bg.name()+";color: "+this->m_settings->color_48v.name()+";");
+}
+void SettingsDialog::onAccepted() {
+  m_settings->saveSettings();
+  accept();
 }
 
-bool SettingsDialog::autoStartOSD() const
-{
-    return m_settings->value("osd/autoStart", false).toBool();
-}
-
-int SettingsDialog::osdUpdateInterval() const
-{
-    return m_settings->value("osd/updateInterval", 1000).toInt();
-}
-
-double SettingsDialog::osdOpacity() const
-{
-    return m_settings->value("osd/opacity", 90).toInt() / 100.0;
-}
-
-QString SettingsDialog::connectionPreference() const
-{
-    return m_settings->value("connection/preference", "Auto").toString();
-}
-
-bool SettingsDialog::enableNotifications() const
-{
-    return m_settings->value("ui/notifications", true).toBool();
-}
-
-void SettingsDialog::onAccepted()
-{
-    saveSettings();
-    accept();
-}
-
-void SettingsDialog::onRejected()
-{
-    loadSettings(); // Restore previous values
-    reject();
-}
-
-void SettingsDialog::onOpacityChanged(int value)
-{
-    m_opacityLabel->setText(QString("%1%").arg(value));
+void SettingsDialog::onRejected() {
+  m_settings->loadSettings(); // Restore previous values
+  onColorChanged();
+  m_mainwindow->onColorChanged();
+  reject();
 }

@@ -20,15 +20,13 @@ public:
   int window_left;
   int window_height;
   int window_width;
-  QString measurements_font;
-  int volts_font_size;
-  int amps_font_size;
-  int power_font_size;
-  int energy_font_size;
-  int graph_height;
+  QString primary_font_name;
+  int primary_font_size;
+  QString secondary_font_name;
+  int secondary_font_size;
   float min_current = 0.0;
   QColor color_bg;
-  QColor color_amps;
+  QColor color_text;
   QColor color_none;
   QColor color_5v;
   QColor color_9v;
@@ -46,7 +44,7 @@ public:
   QColor voltsRgb(PowerDelivery::PD_VOLTS volts) const;
 
   void saveSettings();
-  QColor colorValue(const QString &key, QColor default_color);
+  QColor colorValue(const QString &key, QColor default_color) const;
 
   void loadSettings();
 };
