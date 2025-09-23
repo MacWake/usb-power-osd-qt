@@ -46,7 +46,7 @@ jobs:
         if: matrix.name != 'windows'
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.5.3'
+          version: '6.9.3'
           host: ${{ matrix.name == 'macos-latest' && 'mac' || 'linux' }}
           target: 'desktop'
           arch: ${{ matrix.name == 'macos-latest' && 'clang_64' || 'gcc_64' }}
@@ -58,7 +58,7 @@ jobs:
         if: matrix.name == 'windows'
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.7.2'   # pick your Qt version
+          version: '6.9.3'
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2019_64'
