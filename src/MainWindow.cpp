@@ -299,6 +299,11 @@ void MainWindow::positionWidgets() {
 void MainWindow::resizeEvent(QResizeEvent *event) {
   QMainWindow::resizeEvent(event);
   positionWidgets();
+  this->settings->window_left = this->pos().x();
+  this->settings->window_top = this->pos().y();
+  this->settings->window_width = this->width();
+  this->settings->window_height = this->height();
+  this->settings->saveSettings();
 }
 
 void MainWindow::onPowerDataReceived(const PowerData &data) {
