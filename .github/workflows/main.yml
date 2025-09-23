@@ -46,24 +46,26 @@ jobs:
         if: matrix.name != 'windows'
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.3'
+          version: '6.9.2'
           host: ${{ matrix.name == 'macos-latest' && 'mac' || 'linux' }}
           target: 'desktop'
           arch: ${{ matrix.name == 'macos-latest' && 'clang_64' || 'gcc_64' }}
           modules: 'qtserialport qtconnectivity'
           setup-python: 'false'
           cache: true
+          aqtversion: '==3.2.7'
 
       - name: Install Qt (Windows)
         if: matrix.name == 'windows'
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.3'
+          version: '6.9.2'
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2019_64'
           modules: 'qtserialport qtconnectivity'
           cache: true
+          aqtversion: '==3.2.7'
 
       # Install additional Linux dependencies if needed
       - name: Install additional Linux dependencies
