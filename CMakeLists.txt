@@ -51,6 +51,10 @@ set(SOURCES
         src/PowerMonitor.cpp
         src/SerialManager.cpp
         src/SettingsDialog.cpp
+        src/AboutDialog.cpp
+        src/AboutDialog.h
+        src/lgplv3.cpp
+        src/lgplv3.h
 )
 
 set(HEADERS
