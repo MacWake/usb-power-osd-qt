@@ -8,20 +8,18 @@
 #include <QTimer>
 #include <QWidget>
 
-MainWindow::MainWindow(QWidget *parent) // NOLINT(*-pro-type-member-init)
-    : QMainWindow(parent), m_powerMonitor(new PowerMonitor(this)),
+MainWindow::MainWindow(OsdSettings *settings,
+                       QWidget *parent) // NOLINT(*-pro-type-member-init)
+    : QMainWindow(parent), settings(settings),
+      m_powerMonitor(new PowerMonitor(this)),
       m_deviceManager(new DeviceManager(this)),
-      m_settingsdialog(new SettingsDialog(this)),
+      m_settingsdialog(new SettingsDialog(settings, this)),
       m_history(new MeasurementHistory(1000)), // todo change hard coded value
       m_updateTimer(new QTimer(this)), m_statusBarHideTimer(new QTimer(this)),
       m_deviceSelectionDialog(nullptr)
 
 {
-  if (!this->settings) {
-    this->settings = new OsdSettings("MacWake", "USB Display", this);
-    this->settings->init();
-    this->m_currentGraph = new CurrentGraph(this, m_history, settings);
-  }
+  this->m_currentGraph = new CurrentGraph(this, m_history, settings);
   this->m_deviceManager->setSettings(settings);
   statusBar()->setVisible(false);
 
@@ -99,9 +97,10 @@ void MainWindow::hideStatusBar() {
 }
 
 void MainWindow::connectLastDevice(bool reconnecting = false) {
-  //qDebug() << "Trying to connect to last device... (reconnect="<<reconnecting<<")";
+  // qDebug() << "Trying to connect to last device...
+  // (reconnect="<<reconnecting<<")";
   if (!settings->last_device.isEmpty()) {
-    //qDebug() << "Trying to connect to last device " << settings->last_device;
+    // qDebug() << "Trying to connect to last device " << settings->last_device;
     if (this->m_deviceManager->tryConnect(settings->last_device)) {
       if (reconnecting) {
         this->m_reconnect_timer->stop();
@@ -141,7 +140,7 @@ void MainWindow::showDeviceSelectionDialog() {
       this->settings->saveSettings();
     } else if (connectionType ==
                DeviceSelectionDialog::ConnectionType::SerialPort) {
-      //qDebug() << "Selected serial port; stopping/disconnecting ble device";
+      // qDebug() << "Selected serial port; stopping/disconnecting ble device";
       m_deviceManager->stopBtScanning();
       QString selectedPort = m_deviceSelectionDialog->getSelectedSerialPort();
       // qDebug() << "Selected serial port: " << selectedPort;
@@ -149,12 +148,12 @@ void MainWindow::showDeviceSelectionDialog() {
       this->settings->saveSettings();
       statusBar()->showMessage(
           QString("Connecting to %1...").arg(selectedPort));
-        //qDebug() << "tryConnect() to " << selectedPort;
+      // qDebug() << "tryConnect() to " << selectedPort;
       if (!m_deviceManager->tryConnect(selectedPort)) {
-        //qDebug() << "tryConnect() failed for " << selectedPort;
+        // qDebug() << "tryConnect() failed for " << selectedPort;
         statusBar()->showMessage("Failed to connect to " + selectedPort);
       } else {
-        //qDebug() << "tryConnect() succeeded for " << selectedPort;
+        // qDebug() << "tryConnect() succeeded for " << selectedPort;
         return;
       }
     } else {
@@ -163,10 +162,10 @@ void MainWindow::showDeviceSelectionDialog() {
     }
   } else {
     // User cancelled
-    //statusBar()->showMessage("No device selected.");
+    // statusBar()->showMessage("No device selected.");
     // QTimer::singleShot(2000, QApplication::instance(), &QApplication::quit);
   }
-  //QTimer::singleShot(100, [this] { MainWindow::connectLastDevice(false); });
+  // QTimer::singleShot(100, [this] { MainWindow::connectLastDevice(false); });
 }
 
 // ReSharper disable CppDFAMemoryLeak
@@ -179,29 +178,26 @@ void MainWindow::setupUI() {
   this->lblPower = new QLabel("");
   this->lblEnergy = new QLabel("");
   this->lblMinMaxCurrent = new QLabel("");
-  this->fntVoltage = new QFont(this->settings->measurements_font,
-                               this->settings->volts_font_size);
-  this->fntCurrent = new QFont(this->settings->measurements_font,
-                               this->settings->amps_font_size);
-  this->fntPower = new QFont(this->settings->measurements_font,
-                             this->settings->power_font_size);
-  this->fntEnergy = new QFont(this->settings->measurements_font,
-                              this->settings->energy_font_size);
-  this->lblVoltage->setFont(*fntVoltage);
-  this->lblCurrent->setFont(*fntCurrent);
-  this->lblPower->setFont(*fntPower);
-  this->lblEnergy->setFont(*fntEnergy);
-  this->lblMinMaxCurrent->setFont(*fntPower);
+  this->fntPrimary = new QFont(this->settings->primary_font_name,
+                               this->settings->primary_font_size);
+  this->fntSecondary = new QFont(this->settings->secondary_font_name,
+                                 this->settings->secondary_font_size);
+  this->lblVoltage->setFont(*fntPrimary);
+  this->lblCurrent->setFont(*fntPrimary);
+  this->lblPower->setFont(*fntSecondary);
+  this->lblEnergy->setFont(*fntSecondary);
+  this->lblMinMaxCurrent->setFont(*fntSecondary);
 
-  QColor color(255 - settings->color_bg.red(), 255 - settings->color_bg.green(),
-               255 - settings->color_bg.blue());
-  // this->statusBar()->setStyleSheet("color: " + color.name() + ";");
-  this->lblVoltage->setStyleSheet("QLabel { color: " + color.name() + "; }");
-  this->lblCurrent->setStyleSheet("QLabel { color: " + color.name() + "; }");
-  this->lblPower->setStyleSheet("QLabel { color: " + color.name() + "; }");
-  this->lblEnergy->setStyleSheet("QLabel { color: " + color.name() + "; }");
-  this->lblMinMaxCurrent->setStyleSheet("QLabel { color: " + color.name() +
-                                        "; }");
+  this->lblVoltage->setStyleSheet(
+      "QLabel { color: " + settings->color_text.name() + "; }");
+  this->lblCurrent->setStyleSheet(
+      "QLabel { color: " + settings->color_text.name() + "; }");
+  this->lblPower->setStyleSheet(
+      "QLabel { color: " + settings->color_text.name() + "; }");
+  this->lblEnergy->setStyleSheet(
+      "QLabel { color: " + settings->color_text.name() + "; }");
+  this->lblMinMaxCurrent->setStyleSheet(
+      "QLabel { color: " + settings->color_text.name() + "; }");
 
   this->lblVoltage->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
   this->lblCurrent->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -255,9 +251,13 @@ void MainWindow::positionWidgets() {
   const int rightColumnX = windowWidth / 2;
   const int lineSpacing = -10;
 
-  const int smallWidth = lblPower->fontMetrics().averageCharWidth() * 8;
+  const int smallWidth =
+      windowWidth / 4 -
+      margin; // lblPower->fontMetrics().averageCharWidth() * 8;
   const int smallHeight = lblPower->fontMetrics().height() + 10;
-  const int smallWideWidth = lblPower->fontMetrics().averageCharWidth() * 16;
+  const int smallWideWidth =
+      windowWidth / 2 -
+      margin; // lblPower->fontMetrics().averageCharWidth() * 16;
 
   // Position voltage label (top left)
   lblVoltage->move(leftColumnX, topY);
@@ -276,7 +276,7 @@ void MainWindow::positionWidgets() {
   lblPower->move(leftColumnX, secondRowY);
   lblPower->resize(smallWidth, smallHeight);
 
-  lblEnergy->move((windowWidth - smallWidth) / 2, secondRowY);
+  lblEnergy->move(leftColumnX + smallWidth, secondRowY);
   lblEnergy->resize(smallWidth, smallHeight);
 
   lblMinMaxCurrent->move(windowWidth - smallWideWidth - margin, secondRowY);
@@ -346,7 +346,7 @@ void MainWindow::updateLabels() {
     lblCurrent->setText(QString("%1A").arg(maxCurrent, 0, 'f', 3));
     lblPower->setText(QString("%1W").arg(maxPower, 0, 'f', 3));
     lblEnergy->setText(QString("%1Wh").arg(last.energy, 0, 'f', 3));
-    lblMinMaxCurrent->setText(QString("%1 - %2A")
+    lblMinMaxCurrent->setText(QString("%1-%2A")
                                   .arg(totalMinCurrent, 0, 'f', 3)
                                   .arg(totalMaxCurrent, 0, 'f', 3));
   }
@@ -381,7 +381,38 @@ void MainWindow::resetMeasurementHistory() {
     updateLabels();
   }
 }
+void MainWindow::onPrimaryFontChanged(const QFont &font) {
+  qDebug() << "Primary Font changed: " << font.family() << font.pointSize();
+  this->fntPrimary->setFamily(font.family());
+  this->fntPrimary->setPointSize(font.pointSize());
+  this->lblVoltage->setFont(font);
+  this->lblCurrent->setFont(font);
+  this->repaint();
+}
 
+void MainWindow::onSecondaryFontChanged(const QFont &font) {
+  qDebug() << "Secondary Font changed: " << font.family() << font.pointSize();
+  this->fntSecondary->setFamily(font.family());
+  this->fntSecondary->setPointSize(font.pointSize());
+  this->lblEnergy->setFont(*this->fntSecondary);
+  this->lblMinMaxCurrent->setFont(*this->fntSecondary);
+  this->lblPower->setFont(*this->fntSecondary);
+  this->repaint();
+}
+
+void MainWindow::onColorChanged() {
+  this->lblVoltage->setStyleSheet(
+      "QLabel { color: " + settings->color_text.name() + "; }");
+  this->lblCurrent->setStyleSheet(
+      "QLabel { color: " + settings->color_text.name() + "; }");
+  this->lblPower->setStyleSheet(
+      "QLabel { color: " + settings->color_text.name() + "; }");
+  this->lblEnergy->setStyleSheet(
+      "QLabel { color: " + settings->color_text.name() + "; }");
+  this->lblMinMaxCurrent->setStyleSheet(
+      "QLabel { color: " + settings->color_text.name() + "; }");
+  this->setBackgroundColor(settings->color_bg);
+}
 bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
   if (obj == lblMinMaxCurrent && event->type() == QEvent::MouseButtonDblClick) {
     auto mouseEvent = dynamic_cast<QMouseEvent *>(event);

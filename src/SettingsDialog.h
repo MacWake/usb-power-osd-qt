@@ -1,9 +1,14 @@
 #ifndef SETTINGSDIALOG_H
 #define SETTINGSDIALOG_H
 
-#include <QDialog>
-#include <QSettings>
+#include "OsdSettings.h"
 
+#include <QDialog>
+#include <QFontDialog>
+#include <QSettings>
+#include <qplaintextedit.h>
+
+class MainWindow;
 QT_BEGIN_NAMESPACE
 class QCheckBox;
 class QSpinBox;
@@ -12,38 +17,43 @@ class QSlider;
 class QLabel;
 QT_END_NAMESPACE
 
-class SettingsDialog : public QDialog
-{
-    Q_OBJECT
+class SettingsDialog : public QDialog {
+  Q_OBJECT
 
 public:
-    explicit SettingsDialog(QWidget *parent = nullptr);
-    
-    // Settings accessors
-    bool autoStartOSD() const;
-    int osdUpdateInterval() const;
-    double osdOpacity() const;
-    QString connectionPreference() const;
-    bool enableNotifications() const;
+  explicit SettingsDialog(OsdSettings *settings, QWidget *parent = nullptr);
 
 private slots:
-    void onAccepted();
-    void onRejected();
-    void onOpacityChanged(int value);
+  void onAccepted();
+  void onRejected();
 
 private:
-    void setupUI();
-    void loadSettings();
-    void saveSettings();
-    
-    QSettings *m_settings;
-    
-    QCheckBox *m_autoStartOSDCheck;
-    QSpinBox *m_updateIntervalSpin;
-    QSlider *m_opacitySlider;
-    QLabel *m_opacityLabel;
-    QComboBox *m_connectionCombo;
-    QCheckBox *m_notificationsCheck;
+  void setupUI();
+  QPushButton *createColorButton(const QString &name,
+                                 const QString &displayName,
+                                 QColor *settingsColor);
+  void onColorChanged();
+
+  OsdSettings *m_settings;
+
+  QPushButton * m_priFontButton;
+  QPushButton * m_secFontButton;
+  QSpinBox *m_updateIntervalSpin;
+  QSlider *m_opacitySlider;
+  QLabel *m_opacityLabel;
+  QComboBox *m_connectionCombo;
+  QCheckBox *m_notificationsCheck;
+  MainWindow * m_mainwindow;
+  QSpinBox * m_minCurrent;
+  QPushButton * m_BackgroundButton;
+  QPushButton * m_TextButton;
+  QPushButton * m_5VButton;
+  QPushButton * m_9VButton;
+  QPushButton * m_15VButton;
+  QPushButton * m_20VButton;
+  QPushButton * m_28VButton;
+  QPushButton * m_36VButton;
+  QPushButton * m_48VButton;
 };
 
 #endif // SETTINGS_H

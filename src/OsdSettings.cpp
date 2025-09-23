@@ -7,9 +7,8 @@
 #include <QDebug>
 #include <QtGui/qscreen.h>
 #include <iostream>
-#include <sstream>
 
-OsdSettings::OsdSettings( // NOLINT(*-pro-type-member-init)
+OsdSettings::OsdSettings(        // NOLINT(*-pro-type-member-init)
     const QString &organization, // NOLINT(*-pro-type-member-init)
     const QString &application, QObject *parent)
     : QSettings(organization, application, parent) {
@@ -25,18 +24,20 @@ void OsdSettings::init() {
   window_height = 300;
   window_width = 400;
   min_current = 0;
-  volts_font_size = amps_font_size =
-      static_cast<int>(static_cast<double>(24) * scale);
+  primary_font_size = static_cast<int>(static_cast<double>(24) * scale);
+  secondary_font_size = static_cast<int>(static_cast<double>(18) * scale);
 #if TARGET_OS_OSX
-  measurements_font = "Monaco";
+  primary_font_name = "Monaco";
+  secondary_font_name = "Monaco";
 #elif TARGET_OS_WINDOWS
-  measurements_font = "Arial";
+  primary_font_name = "Arial";
+  secondary_font_name = "Arial";
 #else
-  measurements_font = "Roboto Mono";
+  primary_font_name = "Roboto Mono";
+  secondary_font_name = "Roboto Mono";
 #endif
-  graph_height = 150;
   color_bg = QColor(0, 0, 0);
-  color_amps = QColor(0xff, 0xff, 0xff);
+  color_text = QColor(0xff, 0xff, 0xff);
   color_none = QColor(0xee, 0xee, 0xee);
   color_5v = QColor(0x00, 0xff, 0x00);
   color_9v = QColor(0x7f, 0xff, 0x00);
@@ -89,13 +90,13 @@ void OsdSettings::saveSettings() {
   setValue("view/is_line_graph", this->is_line_graph);
   setValue("window/height", this->window_height);
   setValue("window/width", this->window_width);
-  setValue("window/graph_height", this->graph_height);
-  setValue("measurement/font", this->measurements_font);
-  setValue("measurement/volts_font_size", this->volts_font_size);
-  setValue("measurement/amps_font_size", this->amps_font_size);
+  setValue("measurement/primary_font_name", this->primary_font_name);
+  setValue("measurement/primary_font_size", this->primary_font_size);
+  setValue("measurement/secondary_font_name", this->secondary_font_name);
+  setValue("measurement/secondary_font_size", this->secondary_font_size);
   setValue("measurement/min_current", this->min_current);
   setValue("colors/background", this->color_bg);
-  setValue("colors/amps", this->color_amps);
+  setValue("colors/amps", this->color_text);
   setValue("colors/5v", this->color_5v);
   setValue("colors/9v", this->color_9v);
   setValue("colors/15v", this->color_15v);
@@ -109,9 +110,10 @@ void OsdSettings::saveSettings() {
   sync();
 }
 
-QColor OsdSettings::colorValue(const QString &key, QColor default_color) {
+QColor OsdSettings::colorValue(const QString &key,
+                               const QColor default_color) const {
   if (this->contains(key)) {
-    return QColor(value(key).toString());
+    return {value(key).toString()};
   }
   return default_color;
 }
@@ -122,17 +124,21 @@ void OsdSettings::loadSettings() {
       value("view/is_line_graph", this->is_line_graph).toBool();
   this->window_height = value("window/height", this->window_height).toInt();
   this->window_width = value("window/width", this->window_width).toInt();
-  this->graph_height = value("window/graph_height", this->graph_height).toInt();
-  this->measurements_font =
-      value("measurement/font", this->measurements_font).toString();
-  this->volts_font_size =
-      value("measurement/volts_font_size", this->volts_font_size).toInt();
-  this->amps_font_size =
-      value("measurement/amps_font_size", this->amps_font_size).toInt();
+  this->primary_font_name =
+      value("measurement/primary_font_name", this->primary_font_name)
+          .toString();
+  this->primary_font_size =
+      value("measurement/primary_font_size", this->primary_font_size).toInt();
+  this->secondary_font_name =
+      value("measurement/secondary_font_name", this->secondary_font_name)
+          .toString();
+  this->secondary_font_size =
+      value("measurement/secondary_font_size", this->secondary_font_size)
+          .toInt();
   this->min_current =
       value("measurement/min_current", this->min_current).toFloat();
 
-  this->color_amps = colorValue("colors/amps", this->color_amps);
+  this->color_text = colorValue("colors/amps", this->color_text);
   this->color_5v = colorValue("colors/5v", this->color_5v);
   this->color_9v = colorValue("colors/9v", this->color_9v);
   this->color_15v = colorValue("colors/15v", this->color_15v);
