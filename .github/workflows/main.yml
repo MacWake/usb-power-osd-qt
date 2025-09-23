@@ -53,7 +53,7 @@ jobs:
           modules: 'qtserialport qtconnectivity'
           setup-python: 'false'
           cache: true
-          aqtversion: '==3.2.7'
+          aqtversion: '==3.1.21'
 
       - name: Install Qt (Windows)
         if: matrix.name == 'windows'
@@ -65,7 +65,7 @@ jobs:
           arch: 'win64_msvc2019_64'
           modules: 'qtserialport qtconnectivity'
           cache: true
-          aqtversion: '==3.2.7'
+          aqtversion: '==3.1.21'
 
       # Install additional Linux dependencies if needed
       - name: Install additional Linux dependencies
