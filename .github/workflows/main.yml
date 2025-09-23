@@ -9,149 +9,257 @@ on:
 
 jobs:
   build:
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Build on ${{ matrix.name }}
+    runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-22.04, macos-latest, windows-cross ]
-        build_type: [ Release ]
         include:
-          - os: windows-cross
+          - name: ubuntu-22.04
+            runs-on: ubuntu-22.04
             generator: "Unix Makefiles"
-            runs-on: ubuntu-latest
-          - os: ubuntu-22.04
+            build_type: Release
+          - name: macos-latest
+            runs-on: macos-latest
             generator: "Unix Makefiles"
-          - os: macos-latest
-            generator: "Unix Makefiles"
+            build_type: Release
+          - name: windows
+            runs-on: windows-latest
+            build_type: Release
 
-    steps:
+    steps: # Workaround for Python environment issue on macOS
+      - name: Setup Python environment (macOS)
+        if: matrix.name == 'macos-latest'
+        run: |
+          # Create a virtual environment to avoid externally-managed-environment error
+          python3 -m venv ~/.qt-venv
+          source ~/.qt-venv/bin/activate
+          pip install setuptools py7zr
+          echo "VIRTUAL_ENV=$HOME/.qt-venv" >> $GITHUB_ENV
+          echo "$HOME/.qt-venv/bin" >> $GITHUB_PATH
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # Install Qt for all platforms
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v3
+      - name: Install Qt (Unixoid)
+        if: matrix.name != 'windows'
+        uses: jurplel/install-qt-action@v4
         with:
-          version: '6.5.0'
-          host: ${{ matrix.os == 'windows-cross' && 'windows' || matrix.os == 'macos-latest' && 'mac' || 'linux' }}
+          version: '6.5.3'
+          host: ${{ matrix.name == 'macos-latest' && 'mac' || 'linux' }}
           target: 'desktop'
-          arch: ${{ matrix.os == 'windows-cross' && 'win64_msvc2019_64' || matrix.os == 'macos-latest' && 'clang_64' || 'gcc_64' }}
-          modules: 'qtserialport'
-          setup-python: true
+          arch: ${{ matrix.name == 'macos-latest' && 'clang_64' || 'gcc_64' }}
+          modules: 'qtserialport qtconnectivity'
+          setup-python: 'false'
+          cache: true
+
+      - name: Install Qt (Windows)
+        if: matrix.name == 'windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.2'   # pick your Qt version
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2019_64'
+          modules: 'qtserialport qtconnectivity'
+          cache: true
 
       # Install additional Linux dependencies if needed
       - name: Install additional Linux dependencies
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.name == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0
 
-      - name: Install MinGW and dependencies
-        if: matrix.os == 'windows-cross'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mingw-w64 cmake zip
-
       # macOS code signing setup
       - name: Import Code-Signing Certificates
-        if: matrix.os == 'macos-latest'
+        if: matrix.name == 'macos-latest'
         uses: Apple-Actions/import-codesign-certs@v2
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           keychain-password: ${{ github.run_id }}
 
+      - name: Setup MSVC (Windows)
+        if: matrix.name == 'windows'
+        uses: microsoft/setup-msbuild@v2
+
       - name: Configure CMake for Windows
-        if: matrix.os == 'windows-cross'
+        if: matrix.name == 'windows'
         run: |
-          cmake -B ${{github.workspace}}/build \
-          -G "Unix Makefiles" \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_SYSTEM_NAME=Windows \
-          -DCMAKE_CROSSCOMPILING=TRUE \
-          -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
-          -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
-          -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
-          -DCMAKE_EXE_LINKER_FLAGS="-static-libgcc -static-libstdc++ -static" \
-          -DCMAKE_CXX_FLAGS="-DSTATIC_BUILD"
+          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
 
       - name: Configure CMake (non-Windows)
-        if: matrix.os != 'windows-cross'
+        if: matrix.name != 'windows'
         run: >
           cmake -B ${{github.workspace}}/build 
           -G "${{matrix.generator}}" 
           -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
           -DCMAKE_PREFIX_PATH=${{env.Qt6_DIR}}
-          ${{ matrix.os == 'macos-latest' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
+          ${{ matrix.name == 'macos-latest' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
 
-      # After the build step but before code signing, add:
-      - name: Deploy and Sign Qt dependencies
-        if: matrix.os == 'macos-latest'
+      - name: Debug build output (Unixoid)
+        if: matrix.name != 'windows'
         run: |
-          echo "Deploying and signing Qt frameworks to app bundle"
-          macdeployqt "${{github.workspace}}/build/USB Power OSD.app" -always-overwrite -verbose=2 -sign-for-notarization="Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
+          echo "Listing build directory contents:"
+          ls -lRa ${{github.workspace}}/build/
 
-      # macOS code signing
+      - name: Debug build output (Windows)
+        if: matrix.name == 'windows'
+        run: |
+          echo "Listing build directory contents:"
+          dir -s ${{github.workspace}}/build/
+
+      # Linux deployment - bundle Qt libraries
+      - name: Deploy Qt libraries (Linux)
+        if: matrix.name == 'ubuntu-22.04'
+        run: |
+          # Create deployment directory
+          mkdir -p ${{github.workspace}}/deploy/linux
+          
+          # Copy the executable
+          cp "${{github.workspace}}/build/USB-Power-OSD" "${{github.workspace}}/deploy/linux/"
+          
+          # Copy Qt libraries
+          mkdir -p ${{github.workspace}}/deploy/linux/lib
+          
+          # Find and copy Qt libraries that the executable depends on
+          ldd "${{github.workspace}}/deploy/linux/USB-Power-OSD" 2>/dev/null | grep -i qt6 | awk '{print $3}' | while read lib; do
+            if [ -f "$lib" ]; then
+              cp "$lib" "${{github.workspace}}/deploy/linux/lib/"
+            fi
+          done
+          
+          # Copy platform plugins
+          mkdir -p ${{github.workspace}}/deploy/linux/plugins/platforms
+          if [ -d "${{env.Qt6_DIR}}/../plugins/platforms" ]; then
+            cp -r "${{env.Qt6_DIR}}/../plugins/platforms"/* "${{github.workspace}}/deploy/linux/plugins/platforms/"
+          fi
+          
+          # Create a launcher script that sets up the library path
+          cat > "${{github.workspace}}/deploy/linux/usb-power-osd.sh" << 'EOF'
+          #!/bin/bash
+          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          export LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"
+          export QT_PLUGIN_PATH="$SCRIPT_DIR/plugins"
+          exec "$SCRIPT_DIR/USB-Power-OSD" "$@"
+          EOF
+          
+          chmod +x "${{github.workspace}}/deploy/linux/usb-power-osd.sh"
+          
+          # Create a simple tar.gz archive
+          cd ${{github.workspace}}/deploy
+          tar -czf ../USB-Power-OSD-Linux.tar.gz linux/
+
+      # Windows deployment - bundle Qt libraries
+      - name: Deploy Qt libraries (Windows)
+        if: matrix.name == 'windows'
+        run: |
+          # Create deployment directory
+          mkdir -p ${{github.workspace}}\deploy\windows
+          copy "${{github.workspace}}\build\Release\USB-Power-OSD.exe" "${{github.workspace}}\deploy\windows"
+          windeployqt --release --no-translations --dir "${{github.workspace}}\deploy\windows" "${{github.workspace}}\deploy\windows\USB-Power-OSD.exe"
+          # Create a zip archive
+          cd ${{github.workspace}}\deploy
+          powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows.zip"
+
+      - name: Upload Windows artifacts
+        if: matrix.name == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: ${{github.workspace}}/USB-Power-OSD-Windows.zip
+          if-no-files-found: error
+
+      - name: Upload Linux artifacts
+        if: matrix.name == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: ${{github.workspace}}/USB-Power-OSD-Linux.tar.gz
+          if-no-files-found: error
+
+      - name: Deploy Qt libraries (macOS)
+        if: matrix.name == 'macos-latest'
+        run: |
+          # Use macdeployqt to bundle Qt libraries into the app
+          macdeployqt "${{github.workspace}}/build/USB-Power-OSD.app" -verbose=1
+          
+          # Verify the app structure after deployment
+          echo "App structure after macdeployqt:"
+          ls -la "${{github.workspace}}/build/USB-Power-OSD.app/Contents/"
+
       - name: Sign the macOS application
-        if: matrix.os == 'macos-latest'
+        if: matrix.name == 'macos-latest'
         run: |
           echo "Signing with Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB Power OSD.app"
+          echo "Signing app bundle..."
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --deep --verbose "${{github.workspace}}/build/USB-Power-OSD.app"
+          
+          # Verify the signature
+          echo "Verifying signature..."
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "${{github.workspace}}/build/USB-Power-OSD.app"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB-Power-OSD.app"
 
-      # macOS notarization (optional but recommended)
       - name: Notarize the macOS application
-        if: matrix.os == 'macos-latest'
+        if: matrix.name == 'macos-latest'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
         run: |
           # Create a ZIP archive of the app
-          ditto -c -k --keepParent "${{github.workspace}}/build/USB Power OSD.app" "${{github.workspace}}/build/USB Power OSD.zip"
+          ditto -c -k --keepParent "${{github.workspace}}/build/USB-Power-OSD.app" "${{github.workspace}}/build/USB-Power-OSD.zip"
           
           # Notarize the app
-          xcrun notarytool submit "${{github.workspace}}/build/USB Power OSD.zip" \
+          xcrun notarytool submit "${{github.workspace}}/build/USB-Power-OSD.zip" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_ID_PASSWORD" \
             --team-id "${{ vars.APPLE_TEAM_ID }}" \
             --wait
           
           # Staple the notarization ticket
-          xcrun stapler staple "${{github.workspace}}/build/USB Power OSD.app"
-
-      - name: Upload Windows artifacts
-        if: matrix.os == 'windows-cross'
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-build
-          path: ${{github.workspace}}/build/Release/USB Power OSD.exe
-          if-no-files-found: error
+          xcrun stapler staple "${{github.workspace}}/build/USB-Power-OSD.app"
 
       - name: Upload macOS artifacts
-        if: matrix.os == 'macos-latest'
+        if: matrix.name == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: ${{github.workspace}}/build/USB Power OSD.app
+          path: ${{github.workspace}}/build/USB-Power-OSD.app
           if-no-files-found: error
-
-      # For Linux
-      - name: Debug build output
-        if: matrix.os == 'ubuntu-22.04'
+      # Create dmg
+      - name: Create dmg
+        if: matrix.name == 'macos-latest'
         run: |
-          echo "Listing build directory contents:"
-          ls -la ${{github.workspace}}/build/
-          echo "Finding executable by name:"
-          find ${{github.workspace}}/build -name "USB*" -type f -executable
+          hdiutil create -volname "MacWake USB Power OSD" -srcfolder "build/USB-Power-OSD.app" "build/Macwake USB Power.dmg"
 
-      - name: Upload Linux artifacts
-        if: matrix.os == 'ubuntu-22.04'
+      # Notarize dmg
+      - name: Notarize app
+        if: matrix.name == 'macos-latest'
+        run: |
+          xcrun notarytool submit "build/Macwake USB Power.dmg" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_PASSWORD" \
+            --wait
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+
+      # Staple notarization ticket
+      - name: Staple app
+        if: matrix.name == 'macos-latest'
+        run: |
+          xcrun stapler staple "build/Macwake USB Power.dmg"
+
+      - name: Upload artifact
+        if: matrix.name == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
-          name: linux-build
-          path: ${{github.workspace}}/build/USB Power OSD
-          if-no-files-found: error
+          name: macOS Application Image
+          path: "build/Macwake USB Power.dmg"

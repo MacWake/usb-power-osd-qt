@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>@APP_NAME@</string>
+    <key>CFBundleDisplayName</key>
+    <string>@APP_DISPLAY_NAME@</string>
+    <key>CFBundleIdentifier</key>
+    <string>@BUNDLE_IDENTIFIER@</string>
+    <key>CFBundleVersion</key>
+    <string>@PROJECT_VERSION@</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@PROJECT_VERSION@</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>@EXECUTABLE_NAME@</string>
+    <key>CFBundleIconFile</key>
+    <string>@ICON_FILE@</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>@MIN_MACOS_VERSION@</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    
+    <!-- Modern Bluetooth Permissions (Required for Qt6 Bluetooth on macOS 13+) -->
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>@BLUETOOTH_USAGE_DESCRIPTION@</string>
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>@BLUETOOTH_USAGE_DESCRIPTION@</string>
+    <key>NSBluetoothWhileUsingAppUsageDescription</key>
+    <string>@BLUETOOTH_USAGE_DESCRIPTION@</string>
+    
+    <!-- Legacy iOS-style permissions (may still be needed) -->
+    <key>NSBluetoothPeripheralUsageDescription</key>
+    <string>@BLUETOOTH_USAGE_DESCRIPTION@</string>
+
+    <!-- Developer entitlements for Bluetooth -->
+    <key>com.apple.developer.bluetooth-peripheral</key>
+    <true/>
+    <key>com.apple.developer.bluetooth-central</key>
+    <true/>
+    
+    <!-- Optional: Copyright -->
+    <key>NSHumanReadableCopyright</key>
+    <string>@COPYRIGHT_NOTICE@</string>
+    <!-- Optional: Build number -->
+    <key>CFBundleBuildVersion</key>
+    <string>@BUILD_NUMBER@</string>
+</dict>
+</plist>

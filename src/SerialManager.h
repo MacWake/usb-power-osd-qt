@@ -1,10 +1,18 @@
 #ifndef SERIALMANAGER_H
 #define SERIALMANAGER_H
 
+#include "PowerData.h"
+
 #include <QObject>
 #include <QSerialPort>
 #include <QSerialPortInfo>
 #include <QTimer>
+
+enum SerialProtocol {
+    PLD20 = 1,
+    PLD28,
+    MWAKE1
+};
 
 class SerialManager : public QObject
 {
@@ -12,31 +20,33 @@ class SerialManager : public QObject
 
 public:
     explicit SerialManager(QObject *parent = nullptr);
-    ~SerialManager();
+    ~SerialManager() override;
     
-    void startScanning();
-    void stopScanning();
-    void requestData();
+    bool connectSerialDevice(const QSerialPortInfo &portInfo);
+    void disconnect();
 
 signals:
     void deviceConnected(const QString &deviceName);
     void deviceDisconnected();
-    void dataReceived(const QByteArray &data);
+    void dataReceived(PowerData data);
 
 private slots:
     void onSerialDataReady();
-    void onSerialError(QSerialPort::SerialPortError error);
-    void scanForDevices();
+  void onSerialError(QSerialPort::SerialPortError error);
+    bool tryConnect(const QString &portName);
+    bool waitForLineAvailable(int timeoutMs);
 
-private:
-    void connectToDevice(const QSerialPortInfo &portInfo);
-    bool isTargetDevice(const QSerialPortInfo &portInfo);
-    
+  private:
+    // must set m_protocol and return true on success
+    bool checkPLDProtocol();
+    // must set m_protocol and return true on success
+    bool checkMacwakeProtocol();
+
     QSerialPort *m_serialPort;
-    QTimer *m_scanTimer;
     QByteArray m_readBuffer;
     bool m_isConnected = false;
-    
+    SerialProtocol m_protocol;
+
     // Known VID/PID for USB Power OSD devices
     static const quint16 TARGET_VENDOR_ID;
     static const quint16 TARGET_PRODUCT_ID;

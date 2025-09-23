@@ -14,7 +14,7 @@
 class OsdSettings : public QSettings {
   Q_OBJECT
 public:
-  bool always_on_top;
+  bool always_on_top = false;
   bool is_line_graph = false;
   int window_top;
   int window_left;
@@ -37,6 +37,7 @@ public:
   QColor color_28v;
   QColor color_36v;
   QColor color_48v;
+  QString last_device;
 
   OsdSettings(const QString &organization, const QString &application,
               QObject *parent);
@@ -45,17 +46,9 @@ public:
   QColor voltsRgb(PowerDelivery::PD_VOLTS volts) const;
 
   void saveSettings();
+  QColor colorValue(const QString &key, QColor default_color);
 
   void loadSettings();
-
-private:
-  QColor setting2Rgb(const QString &setting);
-  QString rgb_to_string(const QColor &rgb);
 };
-
-#ifndef MAIN
-extern
-#endif
-    OsdSettings settings;
 
 #endif // SETTINGS_H
