@@ -28,6 +28,10 @@ jobs:
             build_type: Release
 
     steps: # Workaround for Python environment issue on macOS
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Setup Python environment (macOS)
         if: matrix.name == 'macos-latest'
         run: |
@@ -38,9 +42,8 @@ jobs:
           echo "VIRTUAL_ENV=$HOME/.qt-venv" >> $GITHUB_ENV
           echo "$HOME/.qt-venv/bin" >> $GITHUB_PATH
 
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Install WiX Toolset
+        run: choco install wixtoolset --no-progress -y
 
       - name: Install Qt (Unixoid)
         if: matrix.name != 'windows'
@@ -166,6 +169,17 @@ jobs:
           # Create a zip archive
           cd ${{github.workspace}}\deploy
           powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows.zip"
+
+      - name: Create MSI with CPack
+        if: matrix.name == 'windows'
+        run: cmake --build build --config Release --target package
+
+      - name: Upload MSI artifact
+        if: matrix.name == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppInstaller
+          path: build/*.msi
 
       - name: Upload Windows artifacts
         if: matrix.name == 'windows'

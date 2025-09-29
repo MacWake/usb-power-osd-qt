@@ -139,3 +139,42 @@ install(TARGETS usb-power-osd
         BUNDLE DESTINATION .
         RUNTIME DESTINATION bin
 )
+if (WIN32)
+    # Install Qt DLLs and plugins that windeployqt collected
+    install(DIRECTORY ${CMAKE_SOURCE_DIR}/deploy/windows/
+            DESTINATION .
+            FILES_MATCHING
+            PATTERN "*.dll"
+            PATTERN "platforms/*"
+            PATTERN "styles/*"
+            PATTERN "iconengines/*"
+            PATTERN "imageformats/*"
+            PATTERN "resources/*"
+            PATTERN "translations/*"
+            PATTERN "Qt6*.dll"
+    )
+endif()
+
+# -------------------------------
+# Packaging with CPack (Windows)
+# -------------------------------
+include(InstallRequiredSystemLibraries)
+
+set(CPACK_PACKAGE_NAME "USB Power OSD")
+set(CPACK_PACKAGE_VENDOR "MacWake.de")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "USB Power OSD - USB power monitoring and OSD application")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "USB Power OSD")
+
+if (WIN32)
+    # Generate MSI via WiX
+    set(CPACK_GENERATOR "WIX")
+
+    # Optional: create Start Menu entry
+    set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
+
+    # Optional: add license file if you have one
+    # set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
+endif()
+
+include(CPack)
