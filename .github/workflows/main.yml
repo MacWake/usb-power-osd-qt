@@ -43,6 +43,7 @@ jobs:
           echo "$HOME/.qt-venv/bin" >> $GITHUB_PATH
 
       - name: Install WiX Toolset
+        if: matrix.name == 'windows'
         run: choco install wixtoolset --no-progress -y
 
       - name: Install Qt (Unixoid)
