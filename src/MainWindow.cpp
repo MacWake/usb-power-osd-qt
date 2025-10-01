@@ -1,4 +1,6 @@
 #include "MainWindow.h"
+
+#include "AboutDialog.h"
 #include "DeviceSelectionDialog.h"
 #include <QApplication>
 #include <QCloseEvent>
@@ -31,6 +33,10 @@ MainWindow::MainWindow(OsdSettings *settings,
                 MainWindow::settings->window_height);
   }
   setupUI();
+
+  QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
+  QAction *aboutAction = helpMenu->addAction(tr("&About"));
+  connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutDialog);
 
   // Connect signals
   connect(m_deviceManager, &DeviceManager::powerDataReceived, this,
@@ -429,4 +435,8 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 
   // Pass the event to the base class
   return QMainWindow::eventFilter(obj, event);
+}
+void MainWindow::showAboutDialog() {
+  AboutDialog aboutDialog(this);
+  aboutDialog.exec();
 }

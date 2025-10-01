@@ -1,0 +1,20 @@
+   {
+     "branches": [
+       "main"
+     ],
+     "plugins": [
+       "@semantic-release/commit-analyzer",
+       "@semantic-release/release-notes-generator",
+       "@semantic-release/changelog",
+       [
+         "@semantic-release/github",
+         {
+           "assets": [
+             {"path": "build/*.msi", "label": "Windows Installer"},
+             {"path": "deploy/linux/*.tar.gz", "label": "Linux Tarball"},
+             {"path": "build/*.dmg", "label": "macOS DMG"}
+           ]
+         }
+       ]
+     ]
+   }

@@ -8,6 +8,45 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Release job triggered after all builds are successful
+  release:
+    name: Publish New Release
+    needs: build  # Ensure this runs only after the build jobs are successful
+    runs-on: ubuntu-latest  # Can be on Ubuntu since it's simple
+    steps:
+      # Checkout the repository to retrieve the code and tags
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Ensure full history is fetched for semantic-release
+
+      # Set up Node.js to run semantic-release
+      - name: Set Up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # Install dependencies required for release
+      - name: Install Dependencies
+        run: npm ci
+
+      # Run semantic-release to analyze commits, create version, tag, and publish to GitHub
+      - name: Run Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Auth token for GitHub
+        run: npx semantic-release
+
+      # (Optional) Attach build artifacts to the GitHub release
+      - name: Upload Build Artifacts to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            build/*.msi  # MSI file from Windows
+            deploy/linux/*.tar.gz  # Linux artifacts
+            build/*.dmg  # macOS artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Auth token for GitHub
   build:
     name: Build on ${{ matrix.name }}
     runs-on: ${{ matrix.runs-on }}
@@ -28,6 +67,10 @@ jobs:
             build_type: Release
 
     steps: # Workaround for Python environment issue on macOS
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Setup Python environment (macOS)
         if: matrix.name == 'macos-latest'
         run: |
@@ -38,9 +81,9 @@ jobs:
           echo "VIRTUAL_ENV=$HOME/.qt-venv" >> $GITHUB_ENV
           echo "$HOME/.qt-venv/bin" >> $GITHUB_PATH
 
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Install WiX Toolset
+        if: matrix.name == 'windows'
+        run: choco install wixtoolset --no-progress -y
 
       - name: Install Qt (Unixoid)
         if: matrix.name != 'windows'
@@ -166,6 +209,17 @@ jobs:
           # Create a zip archive
           cd ${{github.workspace}}\deploy
           powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows.zip"
+
+      - name: Create MSI with CPack
+        if: matrix.name == 'windows'
+        run: cmake --build build --config Release --target package
+
+      - name: Upload MSI artifact
+        if: matrix.name == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppInstaller
+          path: build/*.msi
 
       - name: Upload Windows artifacts
         if: matrix.name == 'windows'

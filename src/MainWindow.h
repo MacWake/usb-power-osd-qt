@@ -44,6 +44,8 @@ private slots:
   void connectLastDevice(bool reconnecting);
   void showDeviceSelectionDialog();
   void resetMeasurementHistory();
+  void showAboutDialog();
+
 
 
 protected:
