@@ -2,6 +2,7 @@ name: Build
 
 permissions:
   contents: write
+  pull-requests: write
 
 on:
   push:
@@ -11,45 +12,59 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Release job triggered after all builds are successful
   release:
     name: Publish New Release
-    needs: build  # Ensure this runs only after the build jobs are successful
-    runs-on: ubuntu-latest  # Can be on Ubuntu since it's simple
+    needs: build  # Ensure this step waits for the build job to complete
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
     steps:
-      # Checkout the repository to retrieve the code and tags
-      - name: Checkout Code
+      # Checkout the repository to retrieve full history and tags
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Ensure full history is fetched for semantic-release
+          fetch-depth: 0
 
-      # Set up Node.js to run semantic-release
+      # Set up Node.js environment
       - name: Set Up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '20'
           cache: 'npm'
 
-      # Install dependencies required for release
+      # Install dependencies for semantic-release
       - name: Install Dependencies
         run: npm ci
 
-      # Run semantic-release to analyze commits, create version, tag, and publish to GitHub
+      # Debug to verify if build artifacts exist
+      - name: Debug Artifacts
+        run: ls -lah build/ deploy/linux/
+
+      # Run semantic-release to tag and create release
       - name: Run Semantic Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Auth token for GitHub
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
 
-      # (Optional) Attach build artifacts to the GitHub release
-      - name: Upload Build Artifacts to Release
+      # Fetch the created tag
+      - name: Fetch Created Tag
+        id: get-tag
+        run: echo "RELEASE_TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
+      
+      # Use the tag with action-gh-release
+      - name: Upload Artifacts to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            build/*.msi  # MSI file from Windows
-            deploy/linux/*.tar.gz  # Linux artifacts
-            build/*.dmg  # macOS artifacts
+            build/*.msi
+            deploy/linux/*.tar.gz
+            build/*.dmg
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Auth token for GitHub
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
   build:
     name: Build on ${{ matrix.name }}
     runs-on: ${{ matrix.runs-on }}
