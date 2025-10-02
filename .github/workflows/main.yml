@@ -16,7 +16,6 @@ jobs:
     name: Publish New Release
     needs: build  # Ensure this step waits for the build job to complete
     runs-on: ubuntu-latest
-
     permissions:
       contents: write
       pull-requests: write
@@ -28,7 +27,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Set up Node.js environment
+      # Download Linux artifact
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: linux-build
+          path: artifacts/linux
+
+      # Download macOS artifacts
+      - name: Download macOS Application Image Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: macOS Application Image
+          path: artifacts/macos
+
+      # Download Windows MSI
+      - name: Download AppInstaller Artifact (MSI)
+        uses: actions/download-artifact@v3
+        with:
+          name: AppInstaller
+          path: artifacts/windows-msi
+
+      # Set up Node.js for Semantic Release
       - name: Set Up Node.js
         uses: actions/setup-node@v3
         with:
@@ -39,11 +59,7 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      # Debug to verify if build artifacts exist
-      - name: Debug Artifacts
-        run: ls -lah build/ deploy/linux/
-
-      # Run semantic-release to tag and create release
+      # Run Semantic Release
       - name: Run Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -53,15 +69,15 @@ jobs:
       - name: Fetch Created Tag
         id: get-tag
         run: echo "RELEASE_TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
-      
+
       # Use the tag with action-gh-release
       - name: Upload Artifacts to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            build/*.msi
-            deploy/linux/*.tar.gz
-            build/*.dmg
+            artifacts/windows-msi/*
+            artifacts/linux/*.tar.gz
+            artifacts/macos/*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
