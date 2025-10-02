@@ -29,21 +29,21 @@ jobs:
 
       # Download Linux artifact
       - name: Download Linux Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: linux-build
           path: artifacts/linux
 
       # Download macOS artifacts
       - name: Download macOS Application Image Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: macOS Application Image
           path: artifacts/macos
 
       # Download Windows MSI
       - name: Download AppInstaller Artifact (MSI)
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: AppInstaller
           path: artifacts/windows-msi
