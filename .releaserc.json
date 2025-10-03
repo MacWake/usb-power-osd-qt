@@ -12,6 +12,8 @@
         "assets": [
           { "path": "artifacts/windows-msi/*.msi", "label": "Windows Installer" },
           { "path": "artifacts/linux/*.tar.gz", "label": "Linux Binaries" },
+          { "path": "artifacts/linux-deb/*.deb", "label": "Linux DEB Package" },
+          { "path": "artifacts/linux-rpm/*.rpm", "label": "Linux RPM Package" },
           { "path": "artifacts/macos/*.dmg", "label": "macOS Disk Image" }
         ]
       }
