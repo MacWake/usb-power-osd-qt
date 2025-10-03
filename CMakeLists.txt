@@ -76,12 +76,8 @@ set(RESOURCES
         resources/resources.qrc
 )
 
-set(EXECUTABLE_NAME "USB-Power-OSD")
-
-# Create executable
 qt_add_executable(usb-power-osd ${SOURCES} ${HEADERS} ${UI_FILES} ${RESOURCES})
 
-# Link Qt libraries
 target_link_libraries(usb-power-osd PRIVATE
         Qt6::Core
         Qt6::Widgets
@@ -90,10 +86,8 @@ target_link_libraries(usb-power-osd PRIVATE
         Qt6::Network
 )
 
-# Include directories
 target_include_directories(usb-power-osd PRIVATE src)
 
-# Platform-specific settings
 if (WIN32)
     set_target_properties(usb-power-osd PROPERTIES
             WIN32_EXECUTABLE TRUE
@@ -133,30 +127,29 @@ endif ()
 
 # Install configuration
 if (WIN32)
-    # On Windows, install executable to root directory for MSI
     install(TARGETS usb-power-osd
             RUNTIME DESTINATION .
     )
-
-    # Install Qt DLLs and plugins from windeployqt output
-    install(DIRECTORY ${CMAKE_SOURCE_DIR}/deploy/windows/
-            DESTINATION .
-            FILES_MATCHING
-            PATTERN "*.dll"
-            PATTERN "platforms/*"
-            PATTERN "styles/*"
-            PATTERN "iconengines/*"
-            PATTERN "imageformats/*"
-    )
+    
+    if(EXISTS ${CMAKE_SOURCE_DIR}/deploy/windows)
+        install(DIRECTORY ${CMAKE_SOURCE_DIR}/deploy/windows/
+                DESTINATION .
+                FILES_MATCHING
+                PATTERN "*.dll"
+                PATTERN "platforms/*"
+                PATTERN "styles/*"
+                PATTERN "iconengines/*"
+                PATTERN "imageformats/*"
+        )
+    endif()
 else()
-    # On Unix-like systems, install to standard locations
     install(TARGETS usb-power-osd
             BUNDLE DESTINATION .
             RUNTIME DESTINATION bin
     )
 endif()
 
-# Packaging with CPack (Windows)
+# Packaging with CPack
 include(InstallRequiredSystemLibraries)
 
 set(CPACK_PACKAGE_NAME "USB Power OSD")
@@ -167,20 +160,21 @@ set(CPACK_PACKAGE_INSTALL_DIRECTORY "USB Power OSD")
 
 if (WIN32)
     set(CPACK_GENERATOR "WIX")
+    
+    # Set upgrade GUID for proper upgrade handling
+    set(CPACK_WIX_UPGRADE_GUID "12345678-90AB-CDEF-1234-567890ABCDEF")
+    
+    # Configure Start Menu
     set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
-
-    set(CPACK_GENERATOR "WIX")
-    set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
-    set(CPACK_CREATE_DESKTOP_SHORTCUTS TRUE)
-    set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD" "USB Power OSD")
-
-    # Optional: Uncomment when you have a license file
-    # set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
-
-    # Optional: Add WiX patch file for shortcuts if wix-shortcuts.xml exists
+    set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD;USB Power OSD")
+    
+    # Add custom WiX template for shortcuts
     if(EXISTS "${CMAKE_SOURCE_DIR}/wix-shortcuts.xml")
         set(CPACK_WIX_PATCH_FILE "${CMAKE_SOURCE_DIR}/wix-shortcuts.xml")
     endif()
+    
+    # Optional: License file
+    # set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
 endif()
 
 include(CPack)
