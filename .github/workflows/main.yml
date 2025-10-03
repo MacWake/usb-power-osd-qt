@@ -65,23 +65,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx semantic-release
 
-      # Fetch the created tag
-      - name: Fetch Created Tag
-        id: get-tag
-        run: echo "RELEASE_TAG=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
-
-      # Use the tag with action-gh-release
-      - name: Upload Artifacts to GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          files: |
-            artifacts/windows-msi/*.msi
-            artifacts/linux/*.tar.gz
-            artifacts/macos/*.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ env.RELEASE_TAG }}
   build:
     name: Build on ${{ matrix.name }}
     runs-on: ${{ matrix.runs-on }}

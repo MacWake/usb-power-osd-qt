@@ -6,6 +6,15 @@
     "@semantic-release/commit-analyzer",
     "@semantic-release/release-notes-generator",
     "@semantic-release/changelog",
-    "@semantic-release/github"
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          { "path": "artifacts/windows-msi/*.msi", "label": "Windows Installer" },
+          { "path": "artifacts/linux/*.tar.gz", "label": "Linux Binaries" },
+          { "path": "artifacts/macos/*.dmg", "label": "macOS Disk Image" }
+        ]
+      }
+    ]
   ]
 }
