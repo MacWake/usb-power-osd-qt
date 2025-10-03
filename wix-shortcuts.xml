@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CPackWiXPatch>
+  <CPackWiXFragment Id="CM_CPACK_WIX_FRAGMENT_SHORTCUT">
+    <DirectoryRef Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="USB Power OSD">
+        <Component Id="ApplicationShortcut" Guid="*">
+          <Shortcut Id="ApplicationStartMenuShortcut"
+                    Name="USB Power OSD"
+                    Description="USB Power OSD Application"
+                    Target="[#CM_FP_USB_POWER_OSD.exe]"
+                    WorkingDirectory="INSTALLDIR"/>
+          <RemoveFolder Id="ApplicationProgramsFolder" On="uninstall"/>
+          <RegistryValue Root="HKCU" Key="Software\MacWake\USB Power OSD"
+                        Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+        </Component>
+      </Directory>
+    </DirectoryRef>
+  </CPackWiXFragment>
+</CPackWiXPatch>

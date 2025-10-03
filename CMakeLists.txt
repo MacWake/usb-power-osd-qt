@@ -137,9 +137,10 @@ endif ()
 # Install
 install(TARGETS usb-power-osd
         BUNDLE DESTINATION .
-        RUNTIME DESTINATION bin
+        RUNTIME DESTINATION .
 )
 if (WIN32)
+    install(DIRECTORY "${CMAKE_BINARY_DIR}/bin/" DESTINATION .)
     # Install Qt DLLs and plugins that windeployqt collected
     install(DIRECTORY ${CMAKE_SOURCE_DIR}/deploy/windows/
             DESTINATION .
@@ -167,14 +168,17 @@ set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "USB Power OSD")
 
 if (WIN32)
-    # Generate MSI via WiX
     set(CPACK_GENERATOR "WIX")
-
-    # Optional: create Start Menu entry
     set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
-
-    # Optional: add license file if you have one
-    # set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
+    
+    # This creates the Start Menu shortcut
+    set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD" "USB Power OSD")
+    
+    # Add upgrade GUID for proper upgrade handling
+    set(CPACK_WIX_UPGRADE_GUID "12345678-1234-1234-1234-123456789012")
+    
+    # Create custom WiX fragment for shortcuts
+    set(CPACK_WIX_PATCH_FILE "${CMAKE_SOURCE_DIR}/wix-shortcuts.xml")
 endif()
 
 include(CPack)
