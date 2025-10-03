@@ -164,14 +164,9 @@ if (WIN32)
     # Set upgrade GUID for proper upgrade handling
     set(CPACK_WIX_UPGRADE_GUID "12345678-90AB-CDEF-1234-567890ABCDEF")
     
-    # Configure Start Menu
+    # Configure Start Menu shortcuts using CPack's built-in mechanism
+    set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD" "USB Power OSD")
     set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
-    set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD;USB Power OSD")
-    
-    # Add custom WiX template for shortcuts
-    if(EXISTS "${CMAKE_SOURCE_DIR}/wix-shortcuts.xml")
-        set(CPACK_WIX_PATCH_FILE "${CMAKE_SOURCE_DIR}/wix-shortcuts.xml")
-    endif()
     
     # Optional: License file
     # set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
