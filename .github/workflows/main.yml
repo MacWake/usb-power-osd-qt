@@ -84,8 +84,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: ubuntu-22.04
-            runs-on: ubuntu-22.04
+          - name: Linux
+            runs-on: ubuntu-24.04
             generator: "Unix Makefiles"
             build_type: Release
           - name: macos-latest
@@ -140,10 +140,10 @@ jobs:
 
       # Install additional Linux dependencies if needed
       - name: Install additional Linux dependencies
-        if: matrix.name == 'ubuntu-22.04'
+        if: matrix.name == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0
+          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0 rpm
 
       # macOS code signing setup
       - name: Import Code-Signing Certificates
@@ -189,7 +189,7 @@ jobs:
 
       # Linux deployment - bundle Qt libraries
       - name: Deploy Qt libraries (Linux)
-        if: matrix.name == 'ubuntu-22.04'
+        if: matrix.name == 'Linux'
         run: |
           # Create deployment directory
           mkdir -p ${{github.workspace}}/deploy/linux
@@ -229,14 +229,17 @@ jobs:
           tar -czf ../USB-Power-OSD-Linux.tar.gz linux/
 
       - name: Create DEB and RPM packages (Linux)
-        if: matrix.name == 'ubuntu-22.04'
+        if: matrix.name == 'Linux'
         run: |
           cd ${{github.workspace}}/build
+          # Install first to prepare files
+          cmake --build . --target install
+          # Create packages
           cpack -G DEB
           cpack -G RPM
 
       - name: Upload DEB package
-        if: matrix.name == 'ubuntu-22.04'
+        if: matrix.name == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: linux-deb
@@ -244,7 +247,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload RPM package
-        if: matrix.name == 'ubuntu-22.04'
+        if: matrix.name == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: linux-rpm
@@ -315,7 +318,7 @@ jobs:
           path: "${{ steps.find_msi.outputs.MSI_PATH }}"
 
       - name: Upload Linux artifacts
-        if: matrix.name == 'ubuntu-22.04'
+        if: matrix.name == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
