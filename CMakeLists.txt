@@ -205,8 +205,14 @@ elseif(UNIX AND NOT APPLE)
     # Common Linux settings
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "/usr")
     
+    # For packaging, we don't need to install to actual system directories
+    # Set CMAKE_INSTALL_PREFIX to a local directory for packaging
+    if(NOT DEFINED CMAKE_INSTALL_PREFIX)
+        set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install")
+    endif()
+    
     # DEB-specific settings
-    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "MacWake.de <noreply@macwake.de>")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "MacWake.de <thomas@macwake.de>")
     set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
     set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
     set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${CPACK_PACKAGE_HOMEPAGE_URL}")
@@ -220,7 +226,7 @@ elseif(UNIX AND NOT APPLE)
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
     
     # RPM-specific settings
-    set(CPACK_RPM_PACKAGE_LICENSE "LGPL-3.0")
+    set(CPACK_RPM_PACKAGE_LICENSE "MIT"
     set(CPACK_RPM_PACKAGE_GROUP "Applications/System")
     set(CPACK_RPM_PACKAGE_URL "${CPACK_PACKAGE_HOMEPAGE_URL}")
     set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
