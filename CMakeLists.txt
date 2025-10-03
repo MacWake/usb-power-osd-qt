@@ -153,11 +153,6 @@ if (WIN32)
     
     # Install MSVC runtime libraries to root directory (not bin)
     set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
-else()
-    install(TARGETS usb-power-osd
-            BUNDLE DESTINATION .
-            RUNTIME DESTINATION bin
-    )
 elseif(APPLE)
     install(TARGETS usb-power-osd
             BUNDLE DESTINATION .
@@ -187,11 +182,10 @@ endif()
 # Packaging with CPack
 include(InstallRequiredSystemLibraries)
 
-set(CPACK_PACKAGE_NAME "usb-power-osd")
+set(CPACK_PACKAGE_NAME "USB Power OSD")
 set(CPACK_PACKAGE_VENDOR "MacWake.de")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "USB Power OSD - USB power monitoring and OSD application")
 set(CPACK_PACKAGE_DESCRIPTION "Monitor USB power consumption in real-time with an on-screen display. Supports USB-C power monitoring devices via Bluetooth and Serial connections.")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
 set(CPACK_PACKAGE_CONTACT "https://github.com/MacWake/usb-power-osd-qt")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/MacWake/usb-power-osd-qt")
 
@@ -202,7 +196,7 @@ if (WIN32)
     set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD" "USB Power OSD")
     set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
     
-    # set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
     
 elseif(UNIX AND NOT APPLE)
     # Linux packaging - generate both DEB and RPM
