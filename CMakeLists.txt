@@ -89,6 +89,14 @@ target_link_libraries(usb-power-osd PRIVATE
 target_include_directories(usb-power-osd PRIVATE src)
 
 if (WIN32)
+    # Add Windows icon resource
+    if(EXISTS ${CMAKE_SOURCE_DIR}/usbpower.ico)
+        configure_file(${CMAKE_SOURCE_DIR}/usbc-power-osd.exe.manifest ${CMAKE_BINARY_DIR}/usbc-power-osd.exe.manifest COPYONLY)
+        set(WIN32_ICON_RC "${CMAKE_BINARY_DIR}/icon.rc")
+        file(WRITE ${WIN32_ICON_RC} "IDI_ICON1 ICON DISCARDABLE \"${CMAKE_SOURCE_DIR}/usbpower.ico\"\n")
+        target_sources(usb-power-osd PRIVATE ${WIN32_ICON_RC})
+    endif()
+    
     set_target_properties(usb-power-osd PROPERTIES
             WIN32_EXECUTABLE TRUE
             OUTPUT_NAME ${EXECUTABLE_NAME}
