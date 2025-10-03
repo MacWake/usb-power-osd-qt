@@ -34,6 +34,18 @@ jobs:
           name: linux-build
           path: artifacts/linux
 
+      - name: Download DEB Package
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-deb
+          path: artifacts/linux-deb
+
+      - name: Download RPM Package
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-rpm
+          path: artifacts/linux-rpm
+
       # Download macOS artifacts
       - name: Download macOS Application Image Artifact
         uses: actions/download-artifact@v4
@@ -215,6 +227,29 @@ jobs:
           # Create a simple tar.gz archive
           cd ${{github.workspace}}/deploy
           tar -czf ../USB-Power-OSD-Linux.tar.gz linux/
+
+      - name: Create DEB and RPM packages (Linux)
+        if: matrix.name == 'ubuntu-22.04'
+        run: |
+          cd ${{github.workspace}}/build
+          cpack -G DEB
+          cpack -G RPM
+
+      - name: Upload DEB package
+        if: matrix.name == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: ${{github.workspace}}/build/*.deb
+          if-no-files-found: error
+
+      - name: Upload RPM package
+        if: matrix.name == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-rpm
+          path: ${{github.workspace}}/build/*.rpm
+          if-no-files-found: error
 
       # Windows deployment - bundle Qt libraries
       - name: Deploy Qt libraries (Windows)

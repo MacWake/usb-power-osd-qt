@@ -158,29 +158,91 @@ else()
             BUNDLE DESTINATION .
             RUNTIME DESTINATION bin
     )
+elseif(APPLE)
+    install(TARGETS usb-power-osd
+            BUNDLE DESTINATION .
+    )
+else()
+    # Linux install paths
+    install(TARGETS usb-power-osd
+            RUNTIME DESTINATION bin
+    )
+    
+    # Install desktop file
+    if(EXISTS ${CMAKE_SOURCE_DIR}/usbc-power-osd.desktop)
+        install(FILES ${CMAKE_SOURCE_DIR}/usbc-power-osd.desktop
+                DESTINATION share/applications
+                RENAME usb-power-osd.desktop
+        )
+    endif()
+    
+    # Install icon
+    if(EXISTS ${CMAKE_SOURCE_DIR}/usb-power-osd.png)
+        install(FILES ${CMAKE_SOURCE_DIR}/usb-power-osd.png
+                DESTINATION share/icons/hicolor/256x256/apps
+        )
+    endif()
 endif()
 
 # Packaging with CPack
 include(InstallRequiredSystemLibraries)
 
-set(CPACK_PACKAGE_NAME "USB Power OSD")
+set(CPACK_PACKAGE_NAME "usb-power-osd")
 set(CPACK_PACKAGE_VENDOR "MacWake.de")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "USB Power OSD - USB power monitoring and OSD application")
+set(CPACK_PACKAGE_DESCRIPTION "Monitor USB power consumption in real-time with an on-screen display. Supports USB-C power monitoring devices via Bluetooth and Serial connections.")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_INSTALL_DIRECTORY "USB Power OSD")
+set(CPACK_PACKAGE_CONTACT "https://github.com/MacWake/usb-power-osd-qt")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/MacWake/usb-power-osd-qt")
 
 if (WIN32)
     set(CPACK_GENERATOR "WIX")
-    
-    # Set upgrade GUID for proper upgrade handling
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "USB Power OSD")
     set(CPACK_WIX_UPGRADE_GUID "12345678-90AB-CDEF-1234-567890ABCDEF")
-    
-    # Configure Start Menu shortcuts using CPack's built-in mechanism
     set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD" "USB Power OSD")
     set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
     
-    # Optional: License file
     # set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
+    
+elseif(UNIX AND NOT APPLE)
+    # Linux packaging - generate both DEB and RPM
+    set(CPACK_GENERATOR "DEB;RPM")
+    
+    # Common Linux settings
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "/usr")
+    
+    # DEB-specific settings
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "MacWake.de <noreply@macwake.de>")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
+    set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+    set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${CPACK_PACKAGE_HOMEPAGE_URL}")
+    
+    # DEB dependencies for Ubuntu/Debian
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS 
+        "qt6-base-dev, qt6-serialport-dev, qt6-connectivity-dev, libqt6core6t64, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libgl1-mesa-glx | libgl1, libxkbcommon-x11-0"
+    )
+    
+    # Enable automatic dependency detection as fallback
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    
+    # RPM-specific settings
+    set(CPACK_RPM_PACKAGE_LICENSE "LGPL-3.0")
+    set(CPACK_RPM_PACKAGE_GROUP "Applications/System")
+    set(CPACK_RPM_PACKAGE_URL "${CPACK_PACKAGE_HOMEPAGE_URL}")
+    set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
+    
+    # RPM dependencies for Fedora/RHEL/openSUSE
+    set(CPACK_RPM_PACKAGE_REQUIRES
+        "qt6-qtbase, qt6-qtserialport, qt6-qtconnectivity, mesa-libGL"
+    )
+    
+    # Enable automatic dependency detection
+    set(CPACK_RPM_PACKAGE_AUTOREQ ON)
+    
+    # Package file names
+    set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")  # usb-power-osd_2.0.0_amd64.deb
+    set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")     # usb-power-osd-2.0.0.x86_64.rpm
+    
 endif()
 
 include(CPack)
