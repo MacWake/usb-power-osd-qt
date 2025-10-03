@@ -232,9 +232,6 @@ jobs:
         if: matrix.name == 'Linux'
         run: |
           cd ${{github.workspace}}/build
-          # Install first to prepare files
-          cmake --build . --target install
-          # Create packages
           cpack -G DEB
           cpack -G RPM
 
