@@ -131,17 +131,14 @@ if (NOT WIN32 AND NOT APPLE)
     )
 endif ()
 
-# Finalize the executable (this replaces qt_finalize_executable)
-#qt6_finalize_target(usb-power-osd)
-
-# Install
-install(TARGETS usb-power-osd
-        BUNDLE DESTINATION .
-        RUNTIME DESTINATION .
-)
+# Install configuration
 if (WIN32)
-    install(DIRECTORY "${CMAKE_BINARY_DIR}/bin/" DESTINATION .)
-    # Install Qt DLLs and plugins that windeployqt collected
+    # On Windows, install executable to root directory for MSI
+    install(TARGETS usb-power-osd
+            RUNTIME DESTINATION .
+    )
+
+    # Install Qt DLLs and plugins from windeployqt output
     install(DIRECTORY ${CMAKE_SOURCE_DIR}/deploy/windows/
             DESTINATION .
             FILES_MATCHING
@@ -150,15 +147,16 @@ if (WIN32)
             PATTERN "styles/*"
             PATTERN "iconengines/*"
             PATTERN "imageformats/*"
-            PATTERN "resources/*"
-            PATTERN "translations/*"
-            PATTERN "Qt6*.dll"
+    )
+else()
+    # On Unix-like systems, install to standard locations
+    install(TARGETS usb-power-osd
+            BUNDLE DESTINATION .
+            RUNTIME DESTINATION bin
     )
 endif()
 
-# -------------------------------
 # Packaging with CPack (Windows)
-# -------------------------------
 include(InstallRequiredSystemLibraries)
 
 set(CPACK_PACKAGE_NAME "USB Power OSD")
@@ -170,15 +168,19 @@ set(CPACK_PACKAGE_INSTALL_DIRECTORY "USB Power OSD")
 if (WIN32)
     set(CPACK_GENERATOR "WIX")
     set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
-    
-    # This creates the Start Menu shortcut
+
+    set(CPACK_GENERATOR "WIX")
+    set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
+    set(CPACK_CREATE_DESKTOP_SHORTCUTS TRUE)
     set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD" "USB Power OSD")
-    
-    # Add upgrade GUID for proper upgrade handling
-    set(CPACK_WIX_UPGRADE_GUID "12345678-1234-1234-1234-123456789012")
-    
-    # Create custom WiX fragment for shortcuts
-    set(CPACK_WIX_PATCH_FILE "${CMAKE_SOURCE_DIR}/wix-shortcuts.xml")
+
+    # Optional: Uncomment when you have a license file
+    # set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
+
+    # Optional: Add WiX patch file for shortcuts if wix-shortcuts.xml exists
+    if(EXISTS "${CMAKE_SOURCE_DIR}/wix-shortcuts.xml")
+        set(CPACK_WIX_PATCH_FILE "${CMAKE_SOURCE_DIR}/wix-shortcuts.xml")
+    endif()
 endif()
 
 include(CPack)
