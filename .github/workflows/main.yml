@@ -14,7 +14,7 @@ on:
 jobs:
   release:
     name: Publish New Release
-    needs: build  # Ensure this step waits for the build job to complete
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -45,7 +45,7 @@ jobs:
       - name: Download AppInstaller Artifact (MSI)
         uses: actions/download-artifact@v4
         with:
-          name: AppInstaller
+          name: windows-msi
           path: artifacts/windows-msi
 
       # Set up Node.js for Semantic Release
@@ -74,9 +74,9 @@ jobs:
       - name: Upload Artifacts to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ env.RELEASE_TAG }}  # Use the dynamic tag created by semantic-release
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
-            artifacts/windows-msi/*
+            artifacts/windows-msi/*.msi
             artifacts/linux/*.tar.gz
             artifacts/macos/*.dmg
         env:
@@ -257,6 +257,7 @@ jobs:
           $msi = Get-ChildItem -Path "build" -Filter "*.msi" | Select-Object -First 1
           echo "MSI_PATH=$($msi.FullName)" >> $env:GITHUB_OUTPUT
           echo "MSI_NAME=$($msi.Name)" >> $env:GITHUB_OUTPUT
+          Write-Host "Found MSI: $($msi.Name)"
 
       - name: Sign the MSI Installer
         if: matrix.name == 'windows'
@@ -284,7 +285,7 @@ jobs:
         if: matrix.name == 'windows'
         uses: actions/upload-artifact@v4
         with:
-          name: AppInstaller
+          name: windows-msi
           path: "${{ steps.find_msi.outputs.MSI_PATH }}"
 
       - name: Upload Linux artifacts
