@@ -14,7 +14,7 @@ on:
 jobs:
   release:
     name: Publish New Release
-    needs: build  # Ensure this step waits for the build job to complete
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -45,7 +45,7 @@ jobs:
       - name: Download AppInstaller Artifact (MSI)
         uses: actions/download-artifact@v4
         with:
-          name: AppInstaller
+          name: windows-msi
           path: artifacts/windows-msi
 
       # Set up Node.js for Semantic Release
@@ -74,9 +74,9 @@ jobs:
       - name: Upload Artifacts to GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ env.RELEASE_TAG }}  # Use the dynamic tag created by semantic-release
+          tag_name: ${{ env.RELEASE_TAG }}
           files: |
-            artifacts/windows-msi/*
+            artifacts/windows-msi/*.msi
             artifacts/linux/*.tar.gz
             artifacts/macos/*.dmg
         env:
@@ -249,20 +249,44 @@ jobs:
         if: matrix.name == 'windows'
         run: cmake --build build --config Release --target package
 
+      - name: Find MSI file
+        if: matrix.name == 'windows'
+        id: find_msi
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path "build" -Filter "*.msi" | Select-Object -First 1
+          echo "MSI_PATH=$($msi.FullName)" >> $env:GITHUB_OUTPUT
+          echo "MSI_NAME=$($msi.Name)" >> $env:GITHUB_OUTPUT
+          Write-Host "Found MSI: $($msi.Name)"
+
+      - name: Sign the MSI Installer
+        if: matrix.name == 'windows'
+        shell: pwsh
+        run: |
+          # Decode certificate from base64
+          $certBytes = [System.Convert]::FromBase64String("${{ secrets.SIGNING_CERTIFICATE_BASE64 }}")
+          $certPath = "$env:TEMP\cert.pfx"
+          [System.IO.File]::WriteAllBytes($certPath, $certBytes)
+          
+          # Sign using signtool
+          & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" sign `
+            /f "$certPath" `
+            /p "${{ secrets.SIGNING_CERTIFICATE_PASSWORD }}" `
+            /tr http://timestamp.digicert.com `
+            /td SHA256 `
+            /fd SHA256 `
+            /d "USB Power OSD" `
+            "${{ steps.find_msi.outputs.MSI_PATH }}"
+          
+          # Verify signature
+          & "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" verify /pa "${{ steps.find_msi.outputs.MSI_PATH }}"
+
       - name: Upload MSI artifact
         if: matrix.name == 'windows'
         uses: actions/upload-artifact@v4
         with:
-          name: AppInstaller
-          path: build/*.msi
-
-      - name: Upload Windows artifacts
-        if: matrix.name == 'windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-build
-          path: ${{github.workspace}}/USB-Power-OSD-Windows.zip
-          if-no-files-found: error
+          name: windows-msi
+          path: "${{ steps.find_msi.outputs.MSI_PATH }}"
 
       - name: Upload Linux artifacts
         if: matrix.name == 'ubuntu-22.04'
