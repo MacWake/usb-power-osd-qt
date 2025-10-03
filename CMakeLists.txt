@@ -131,17 +131,20 @@ if (WIN32)
             RUNTIME DESTINATION .
     )
     
-    if(EXISTS ${CMAKE_SOURCE_DIR}/deploy/windows)
-        install(DIRECTORY ${CMAKE_SOURCE_DIR}/deploy/windows/
-                DESTINATION .
-                FILES_MATCHING
-                PATTERN "*.dll"
-                PATTERN "platforms/*"
-                PATTERN "styles/*"
-                PATTERN "iconengines/*"
-                PATTERN "imageformats/*"
-        )
-    endif()
+    # Install all DLLs and plugins from the build directory after windeployqt runs
+    install(DIRECTORY ${CMAKE_BINARY_DIR}/Release/
+            DESTINATION .
+            FILES_MATCHING
+            PATTERN "*.dll"
+            PATTERN "platforms/*"
+            PATTERN "styles/*"
+            PATTERN "iconengines/*"
+            PATTERN "imageformats/*"
+            PATTERN "*.exe" EXCLUDE  # Don't duplicate the exe
+    )
+    
+    # Install MSVC runtime libraries to root directory (not bin)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
 else()
     install(TARGETS usb-power-osd
             BUNDLE DESTINATION .
