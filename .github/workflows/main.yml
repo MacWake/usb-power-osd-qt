@@ -124,8 +124,9 @@ jobs:
 
       - name: Get Next Version
         id: get_version
+        shell: bash
         run: |
-          NEXT_VERSION=$(npx semantic-release --dry-run 2>/dev/null | grep -o "The next release version is [0-9]\+\.[0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+" || echo "0.0.0")
+          NEXT_VERSION=$(npx semantic-release --dry-run 2>/dev/null | grep -o "The next release version is [0-9]\+\.[0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+" || echo "0.1.0")
           echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
           echo "Next version will be: $NEXT_VERSION"
 
