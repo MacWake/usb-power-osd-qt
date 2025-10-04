@@ -12,10 +12,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Quick build job for PRs and non-release pushes
+  # Quick build job for PRs only
   ci-build:
     name: CI Build on ${{ matrix.name }}
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !contains(github.event.head_commit.message, 'fix:') && !contains(github.event.head_commit.message, 'feat:') && !contains(github.event.head_commit.message, 'BREAKING CHANGE:'))
+    if: github.event_name == 'pull_request'
     runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
@@ -86,10 +86,10 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" ${{ matrix.name == 'macOS' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
           cmake --build build --config Release
 
-  # Full release build with proper versioning
+  # Full release build - runs on every push to main
   release-build:
     name: Release Build on ${{ matrix.name }}
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'fix:') || contains(github.event.head_commit.message, 'feat:') || contains(github.event.head_commit.message, 'BREAKING CHANGE:'))
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
@@ -485,7 +485,7 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      # Run Semantic Release
+      # Run Semantic Release - it will decide whether to create a release
       - name: Run Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
