@@ -1,7 +1,11 @@
-
 cmake_minimum_required(VERSION 3.21.1)
 
-project(usb-power-osd VERSION 2.0.0 LANGUAGES CXX)
+# Use override version if provided, otherwise use default
+if(DEFINED PROJECT_VERSION_OVERRIDE)
+    project(usb-power-osd VERSION ${PROJECT_VERSION_OVERRIDE} LANGUAGES CXX)
+else()
+    project(usb-power-osd VERSION 2.0.0 LANGUAGES CXX)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -182,7 +186,7 @@ endif()
 # Packaging with CPack
 include(InstallRequiredSystemLibraries)
 
-set(CPACK_PACKAGE_NAME "USB Power OSD")
+set(CPACK_PACKAGE_NAME "usb-power-osd")
 set(CPACK_PACKAGE_VENDOR "MacWake.de")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "USB Power OSD - USB power monitoring and OSD application")
 set(CPACK_PACKAGE_DESCRIPTION "Monitor USB power consumption in real-time with an on-screen display. Supports USB-C power monitoring devices via Bluetooth and Serial connections.")
@@ -196,6 +200,11 @@ if (WIN32)
     set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD" "USB Power OSD")
     set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
     
+    # Configure WiX to use the executable's icon for shortcuts
+    set(CPACK_WIX_PRODUCT_ICON "${CMAKE_CURRENT_SOURCE_DIR}/usbpower.ico")
+    set(CPACK_WIX_UI_BANNER "${CMAKE_CURRENT_SOURCE_DIR}/usbpower.ico")
+    
+    # Use the license file
     set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE.txt")
     
 elseif(UNIX AND NOT APPLE)
@@ -205,27 +214,23 @@ elseif(UNIX AND NOT APPLE)
     # Common Linux settings
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "/usr")
     
-    # For packaging, we don't need to install to actual system directories
-    # Set CMAKE_INSTALL_PREFIX to a local directory for packaging
-    if(NOT DEFINED CMAKE_INSTALL_PREFIX)
-        set(CMAKE_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/install")
-    endif()
-    
     # DEB-specific settings
-    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "MacWake.de <thomas@macwake.de>")
+    set(CPACK_DEBIAN_PACKAGE_NAME "usb-power-osd")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "MacWake.de <noreply@macwake.de>")
     set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
     set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
     set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${CPACK_PACKAGE_HOMEPAGE_URL}")
     
     # DEB dependencies for Ubuntu/Debian
     set(CPACK_DEBIAN_PACKAGE_DEPENDS 
-        "qt6-base-dev, qt6-serialport-dev, qt6-connectivity-dev, libqt6core6t64, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libgl1-mesa-glx | libgl1, libxkbcommon-x11-0"
+        "libqt6core6t64, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libgl1-mesa-glx | libgl1, libxkbcommon-x11-0"
     )
     
     # Enable automatic dependency detection as fallback
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
     
     # RPM-specific settings
+    set(CPACK_RPM_PACKAGE_NAME "usb-power-osd")
     set(CPACK_RPM_PACKAGE_LICENSE "MIT")
     set(CPACK_RPM_PACKAGE_GROUP "Applications/System")
     set(CPACK_RPM_PACKAGE_URL "${CPACK_PACKAGE_HOMEPAGE_URL}")
