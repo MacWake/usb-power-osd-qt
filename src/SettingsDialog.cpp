@@ -118,7 +118,7 @@ void SettingsDialog::setupUI() // ReSharper disable once CppDFAMemoryLeak
 QPushButton* SettingsDialog::createColorButton(const QString& name, const QString& displayName, QColor* settingsColor) {
   auto* button = new QPushButton(displayName, this);
   connect(button, &QPushButton::clicked, [this, settingsColor, displayName] {
-      QColor selected = QColorDialog::getColor(*settingsColor, this, displayName + " Color", QColorDialog::NoEyeDropperButton);
+      QColor selected = QColorDialog::getColor(*settingsColor, this, displayName + " Color");
       if (selected.isValid()) {
           *settingsColor = selected;
           this->onColorChanged();
