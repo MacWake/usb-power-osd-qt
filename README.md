@@ -4,11 +4,9 @@ A cross-platform Qt6 application for monitoring USB power consumption with on-sc
 
 ## Features
 
-- **Real-time USB power monitoring** - Voltage, Current, Power, and Energy consumption
+- **Real-time USB power monitoring** - Voltage, Current, Power, and Energy consumption (optional)
 - **Cross-platform support** - Linux, Windows, and macOS
 - **Multiple connection methods** - Bluetooth Low Energy and Serial/USB
-- **Customizable OSD** - Draggable, semi-transparent overlay
-- **System tray integration** - Minimize to tray functionality
 - **Auto-discovery** - Automatic detection of compatible devices
 - **Modern Qt6 interface** - Native look and feel on all platforms
 

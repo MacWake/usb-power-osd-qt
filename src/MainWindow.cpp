@@ -3,7 +3,6 @@
 #include "AboutDialog.h"
 #include "DeviceSelectionDialog.h"
 #include <QApplication>
-#include <QCloseEvent>
 #include <QLabel>
 #include <QMenuBar>
 #include <QStatusBar>
@@ -34,9 +33,6 @@ MainWindow::MainWindow(OsdSettings *settings,
   }
   setupUI();
 
-  QMenu *helpMenu = menuBar()->addMenu(tr("&Help"));
-  QAction *aboutAction = helpMenu->addAction(tr("&About"));
-  connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutDialog);
 
   // Connect signals
   connect(m_deviceManager, &DeviceManager::powerDataReceived, this,
@@ -67,7 +63,7 @@ MainWindow::MainWindow(OsdSettings *settings,
 }
 
 MainWindow::~MainWindow() = default;
-void MainWindow::startReconnectTimer() { this->m_reconnect_timer->start(); }
+void MainWindow::startReconnectTimer() const { this->m_reconnect_timer->start(); }
 void MainWindow::showStatusMessage(const QString &message,
                                    int hideAfterMs = 5000) {
   statusBar()->setVisible(true);
@@ -124,6 +120,11 @@ void MainWindow::connectLastDevice(bool reconnecting = false) {
   }
 }
 
+void MainWindow::toggleEnergy() const {
+    this->settings->is_energy_displayed = !this->settings->is_energy_displayed;
+    this->settings->saveSettings();
+    this->lblEnergy->setVisible(this->settings->is_energy_displayed);
+}
 void MainWindow::showDeviceSelectionDialog() {
   this->m_reconnect_timer->stop();
   if (!m_deviceSelectionDialog) {
@@ -184,15 +185,15 @@ void MainWindow::setupUI() {
   this->lblPower = new QLabel("");
   this->lblEnergy = new QLabel("");
   this->lblMinMaxCurrent = new QLabel("");
-  this->fntPrimary = new QFont(this->settings->primary_font_name,
+  this->fntPrimary = QFont(this->settings->primary_font_name,
                                this->settings->primary_font_size);
-  this->fntSecondary = new QFont(this->settings->secondary_font_name,
+  this->fntSecondary = QFont(this->settings->secondary_font_name,
                                  this->settings->secondary_font_size);
-  this->lblVoltage->setFont(*fntPrimary);
-  this->lblCurrent->setFont(*fntPrimary);
-  this->lblPower->setFont(*fntSecondary);
-  this->lblEnergy->setFont(*fntSecondary);
-  this->lblMinMaxCurrent->setFont(*fntSecondary);
+  this->lblVoltage->setFont(fntPrimary);
+  this->lblCurrent->setFont(fntPrimary);
+  this->lblPower->setFont(fntSecondary);
+  this->lblEnergy->setFont(fntSecondary);
+  this->lblMinMaxCurrent->setFont(fntSecondary);
 
   this->lblVoltage->setStyleSheet(
       "QLabel { color: " + settings->color_text.name() + "; }");
@@ -224,15 +225,31 @@ void MainWindow::setupUI() {
   lblCurrent->setParent(centralWidget);
   lblPower->setParent(centralWidget);
   lblEnergy->setParent(centralWidget);
+  lblEnergy->setVisible(this->settings->is_energy_displayed);
   lblMinMaxCurrent->setParent(centralWidget);
   m_currentGraph->setParent(centralWidget);
 
+    auto toggleEnergyAction = new QAction("Toggle Energy", this);
+    toggleEnergyAction->setShortcut(QKeySequence("e"));
+    toggleEnergyAction->setCheckable(true);
+    toggleEnergyAction->setChecked(this->settings->is_energy_displayed);
+    connect(toggleEnergyAction, &QAction::triggered, this, &MainWindow::toggleEnergy);
+
+    auto resetHistoryAction = new QAction("Reset History", this);
+    resetHistoryAction->setShortcut(QKeySequence("r"));
+    connect(resetHistoryAction, &QAction::triggered, this, &MainWindow::resetMeasurementHistory);
+
   // Menu bar
+    auto *helpMenu = menuBar()->addMenu(tr("&Help"));
+    QAction *aboutAction = helpMenu->addAction(tr("&About"));
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutDialog);
+
   auto *fileMenu = menuBar()->addMenu("&File");
   fileMenu->addAction("&Settings", this, &MainWindow::showSettings);
   fileMenu->addSeparator();
-  fileMenu->addAction("&Change Device", this,
-                      &MainWindow::showDeviceSelectionDialog);
+  fileMenu->addAction("&Change Device", this, &MainWindow::showDeviceSelectionDialog);
+  fileMenu->addAction(toggleEnergyAction);
+
   fileMenu->addSeparator();
   fileMenu->addAction("E&xit", this, &QWidget::close);
 
@@ -267,12 +284,12 @@ void MainWindow::positionWidgets() {
 
   // Position voltage label (top left)
   lblVoltage->move(leftColumnX, topY);
-  lblVoltage->resize(windowWidth / 2 - margin,
+  lblVoltage->resize(windowWidth,
                      lblVoltage->fontMetrics().height() + 10);
 
   // Position current label (top right)
-  lblCurrent->move(rightColumnX, topY);
-  lblCurrent->resize(windowWidth / 2 - margin,
+  lblCurrent->move(leftColumnX, topY);
+  lblCurrent->resize(windowWidth - margin*2,
                      lblCurrent->fontMetrics().height() + 10);
 
   // Second row - power, energy, min/max current
@@ -280,13 +297,13 @@ void MainWindow::positionWidgets() {
       topY + lblVoltage->height() + labelSpacing + lineSpacing;
 
   lblPower->move(leftColumnX, secondRowY);
-  lblPower->resize(smallWidth, smallHeight);
+  lblPower->resize(smallWidth*2, smallHeight);
 
-  lblEnergy->move(leftColumnX + smallWidth, secondRowY);
-  lblEnergy->resize(smallWidth, smallHeight);
+  lblEnergy->move(leftColumnX+smallWidth/2, secondRowY);
+  lblEnergy->resize(smallWidth*2, smallHeight);
 
-  lblMinMaxCurrent->move(windowWidth - smallWideWidth - margin, secondRowY);
-  lblMinMaxCurrent->resize(smallWideWidth, smallHeight);
+  lblMinMaxCurrent->move(leftColumnX, secondRowY);
+  lblMinMaxCurrent->resize(windowWidth - margin*2, smallHeight);
 
   // Position CurrentGraph widget at the bottom
   const int graphY = secondRowY + smallHeight + labelSpacing;
@@ -345,6 +362,10 @@ void MainWindow::updateLabels() {
   double maxPower;
   double totalMinCurrent;
   double totalMaxCurrent;
+    if (this->m_history->is_empty()) {
+        this->updateUINoData();
+        return;
+    }
   auto last = this->m_history->atByAge(0);
   if (last.voltage < 1.0 || last.current < this->settings->min_current) {
     this->updateUINoData();
@@ -365,13 +386,12 @@ void MainWindow::updateLabels() {
 void MainWindow::updateUINoData() {
   double totalMinCurrent;
   double totalMaxCurrent;
-  auto last = this->m_history->atByAge(0);
   this->m_history->minMaxCurrentLastN(this->m_history->size(), totalMinCurrent,
                                       totalMaxCurrent);
   lblVoltage->setText(QString("---"));
   lblCurrent->setText(QString("---"));
   lblPower->setText(QString("---"));
-  lblEnergy->setText(QString("%1 Wh").arg(last.energy, 0, 'f', 3));
+  lblEnergy->setText(QString("---"));
   lblMinMaxCurrent->setText(QString("%1 - %2A")
                                 .arg(totalMinCurrent, 0, 'f', 3)
                                 .arg(totalMaxCurrent, 0, 'f', 3));
@@ -394,8 +414,8 @@ void MainWindow::resetMeasurementHistory() {
 }
 void MainWindow::onPrimaryFontChanged(const QFont &font) {
   qDebug() << "Primary Font changed: " << font.family() << font.pointSize();
-  this->fntPrimary->setFamily(font.family());
-  this->fntPrimary->setPointSize(font.pointSize());
+  this->fntPrimary.setFamily(font.family());
+  this->fntPrimary.setPointSize(font.pointSize());
   this->lblVoltage->setFont(font);
   this->lblCurrent->setFont(font);
   this->repaint();
@@ -403,11 +423,11 @@ void MainWindow::onPrimaryFontChanged(const QFont &font) {
 
 void MainWindow::onSecondaryFontChanged(const QFont &font) {
   qDebug() << "Secondary Font changed: " << font.family() << font.pointSize();
-  this->fntSecondary->setFamily(font.family());
-  this->fntSecondary->setPointSize(font.pointSize());
-  this->lblEnergy->setFont(*this->fntSecondary);
-  this->lblMinMaxCurrent->setFont(*this->fntSecondary);
-  this->lblPower->setFont(*this->fntSecondary);
+  this->fntSecondary.setFamily(font.family());
+  this->fntSecondary.setPointSize(font.pointSize());
+  this->lblEnergy->setFont(this->fntSecondary);
+  this->lblMinMaxCurrent->setFont(this->fntSecondary);
+  this->lblPower->setFont(this->fntSecondary);
   this->repaint();
 }
 

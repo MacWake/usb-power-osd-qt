@@ -99,7 +99,9 @@ void DeviceManager::onSerialDeviceDisconnected() {
   if (!m_isBluetoothConnected) {
     emit deviceDisconnected();
   }
-  dynamic_cast<MainWindow*>(this->parent())->startReconnectTimer();
+    if (auto *mw = qobject_cast<MainWindow*>(parent())) {
+        mw->startReconnectTimer();
+    }
 }
 
 void DeviceManager::onBluetoothDataReceived(const QByteArray &data) {

@@ -114,9 +114,7 @@ std::vector<PowerData> MeasurementHistory::lastNSamplesNewestFirst(std::size_t l
 
 const PowerData& MeasurementHistory::atByAge(std::size_t ageFromNewest) const {
     if (ageFromNewest >= _valid_count) {
-        auto empty = new PowerData();
-        return *empty;
-        //throw std::out_of_range("MeasurementHistory::atByAge out of range");
+        throw std::out_of_range("MeasurementHistory::atByAge out of range");
     }
     
     std::size_t idx = newestIndex();
