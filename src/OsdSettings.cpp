@@ -20,7 +20,7 @@ void OsdSettings::init() {
 
   // Default settings
   always_on_top = false;
-  is_line_graph = false;
+  is_energy_displayed = false;
   window_height = 300;
   window_width = 400;
   min_current = 0;
@@ -85,9 +85,8 @@ QColor OsdSettings::voltsRgb(PowerDelivery::PD_VOLTS volts) const {
 }
 
 void OsdSettings::saveSettings() {
-  setValue("view/always_on_top", always_on_top);
   setValue("view/always_on_top", this->always_on_top);
-  setValue("view/is_line_graph", this->is_line_graph);
+  setValue("view/is_energy_displayed", this->is_energy_displayed);
   setValue("window/height", this->window_height);
   setValue("window/width", this->window_width);
   setValue("measurement/primary_font_name", this->primary_font_name);
@@ -120,8 +119,8 @@ QColor OsdSettings::colorValue(const QString &key,
 void OsdSettings::loadSettings() {
   this->always_on_top =
       value("view/always_on_top", this->always_on_top).toBool();
-  this->is_line_graph =
-      value("view/is_line_graph", this->is_line_graph).toBool();
+  this->is_energy_displayed =
+      value("view/is_energy_displayed", this->is_energy_displayed).toBool();
   this->window_height = value("window/height", this->window_height).toInt();
   this->window_width = value("window/width", this->window_width).toInt();
   this->primary_font_name =

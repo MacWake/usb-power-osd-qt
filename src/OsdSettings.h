@@ -15,7 +15,7 @@ class OsdSettings : public QSettings {
   Q_OBJECT
 public:
   bool always_on_top = false;
-  bool is_line_graph = false;
+  bool is_energy_displayed = false;
   int window_top;
   int window_left;
   int window_height;

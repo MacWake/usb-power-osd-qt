@@ -25,7 +25,7 @@ public:
   void tryConnectLastDevice();
   explicit MainWindow(OsdSettings *settings, QWidget *parent = nullptr);
   ~MainWindow() override;
-  void startReconnectTimer();
+  void startReconnectTimer() const;
   void showStatusMessage(const QString &message, int hideAfterMs);
 
   // Public getter for settings
@@ -42,6 +42,7 @@ private slots:
   void updateLabels();
   void hideStatusBar();
   void connectLastDevice(bool reconnecting);
+  void toggleEnergy() const;
   void showDeviceSelectionDialog();
   void resetMeasurementHistory();
   void showAboutDialog();
@@ -74,8 +75,8 @@ private:
   QLabel *lblPower;
   QLabel *lblEnergy;
   QLabel *lblMinMaxCurrent;
-  QFont *fntPrimary;
-  QFont *fntSecondary;
+  QFont fntPrimary;
+  QFont fntSecondary;
 
   CurrentGraph *m_currentGraph;
   QTimer *m_reconnect_timer;
