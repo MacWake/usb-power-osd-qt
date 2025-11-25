@@ -240,10 +240,6 @@ void MainWindow::setupUI() {
     connect(resetHistoryAction, &QAction::triggered, this, &MainWindow::resetMeasurementHistory);
 
   // Menu bar
-    auto *helpMenu = menuBar()->addMenu(tr("&Help"));
-    QAction *aboutAction = helpMenu->addAction(tr("&About"));
-    connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutDialog);
-
   auto *fileMenu = menuBar()->addMenu("&File");
   fileMenu->addAction("&Settings", this, &MainWindow::showSettings);
   fileMenu->addSeparator();
@@ -253,7 +249,11 @@ void MainWindow::setupUI() {
   fileMenu->addSeparator();
   fileMenu->addAction("E&xit", this, &QWidget::close);
 
-  //    auto *viewMenu = menuBar()->addMenu("&View");
+    auto *helpMenu = menuBar()->addMenu(tr("&Help"));
+    QAction *aboutAction = helpMenu->addAction(tr("&About"));
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutDialog);
+
+    //    auto *viewMenu = menuBar()->addMenu("&View");
   //    viewMenu->addAction("Toggle &OSD", this, &MainWindow::toggleOSD);
   positionWidgets();
 }
