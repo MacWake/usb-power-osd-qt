@@ -120,7 +120,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm i && npm ci
 
       - name: Get Next Version
         id: get_version
