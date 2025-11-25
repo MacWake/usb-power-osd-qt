@@ -120,7 +120,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm i && npm ci
+        run: npm ci
 
       - name: Get Next Version
         id: get_version
@@ -481,7 +481,7 @@ jobs:
       - name: Set Up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       # Install dependencies for semantic-release
