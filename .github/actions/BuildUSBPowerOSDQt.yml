@@ -104,3 +104,15 @@ jobs:
           usb-power-osd-qt-ubuntu-latest/*
           usb-power-osd-qt-windows-latest/*
           usb-power-osd-qt-macos-latest/*
+
+          # Set up Node.js for Semantic Release
+          - name: Set Up Node.js
+            uses: actions/setup-node@v3
+            with:
+              node-version: '22'
+
+          # Run Semantic Release - it will decide whether to create a release
+          - name: Run Semantic Release
+            env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            run: npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/commit-analyzer --package @semantic-release/github --package @semantic-release/release-notes-generator semantic-release

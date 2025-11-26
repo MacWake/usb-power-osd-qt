@@ -117,16 +117,12 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: '22'
-          cache: 'npm'
-
-      - name: Install Dependencies
-        run: npm ci
 
       - name: Get Next Version
         id: get_version
         shell: bash
         run: |
-          NEXT_VERSION=$(npx semantic-release --dry-run 2>/dev/null | grep -o "The next release version is [0-9]\+\.[0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+" || echo "0.1.0")
+          NEXT_VERSION=$(npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/commit-analyzer --package @semantic-release/github --package @semantic-release/release-notes-generator semantic-release --dry-run 2>/dev/null | grep -o "The next release version is [0-9]\+\.[0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+" || echo "0.1.0")
           echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
           echo "Next version will be: $NEXT_VERSION"
 
