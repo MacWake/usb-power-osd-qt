@@ -480,12 +480,8 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      # Install dependencies for semantic-release
-      - name: Install Dependencies
-        run: npm ci
-
       # Run Semantic Release - it will decide whether to create a release
       - name: Run Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+        run: npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/commit-analyzer --package @semantic-release/github --package @semantic-release/release-notes-generator semantic-release
