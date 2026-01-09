@@ -13,6 +13,9 @@
 //#define SERVICE_UUID "01bc9d6f-5b93-41bc-b63f-da5011e34f68"
 //#define CHARACTERISTIC_UUID "307fc9ab-5438-4e03-83fa-b9fc3d6afde2"
 
+#include <QBluetoothLocalDevice>
+#include <QBluetoothAddress>
+
 const QString BluetoothManager::SERVICE_UUID = "{01bc9d6f-5b93-41bc-b63f-da5011e34f68}";
 const QString BluetoothManager::DATA_CHARACTERISTIC_UUID = "{307fc9ab-5438-4e03-83fa-b9fc3d6afde2}";
 
@@ -39,6 +42,21 @@ BluetoothManager::BluetoothManager(QObject *parent)
             startScanning();
         }
     });
+
+    // Log local adapter info
+    QList<QBluetoothHostInfo> adapters = QBluetoothLocalDevice::allDevices();
+    qDebug() << "Found" << adapters.count() << "local Bluetooth adapters:";
+    for (const QBluetoothHostInfo &adapter : adapters) {
+        QBluetoothLocalDevice localDevice(adapter.address());
+        QString features = "Features:";
+        if (localDevice.isValid()) {
+            // Check for BLE support (Qt 5.7+)
+            // QBluetoothDeviceDiscoveryAgent::LowEnergyMethod is used in startScanning
+            // but we can check if the adapter itself is powered on and its address
+            qDebug() << "  Adapter:" << adapter.name() << "[" << adapter.address().toString() << "]";
+            qDebug() << "    Connected:" << (localDevice.hostMode() != QBluetoothLocalDevice::HostPoweredOff);
+        }
+    }
 }
 
 BluetoothManager::~BluetoothManager()
@@ -56,8 +74,16 @@ void BluetoothManager::startScanning()
     if (m_discoveryAgent->isActive()) {
         return;
     }
+
+    auto supportedDiscoveryMethods = QBluetoothDeviceDiscoveryAgent::supportedDiscoveryMethods();
+    qDebug() << "Supported discovery methods:" << supportedDiscoveryMethods;
+    if (!(supportedDiscoveryMethods & QBluetoothDeviceDiscoveryAgent::LowEnergyMethod)) {
+        qWarning() << "CRITICAL: This Bluetooth adapter DOES NOT support Low Energy (BLE) discovery!";
+    }
+
     m_isActive = true;
-    //qDebug() << "Starting Bluetooth scan...";
+    qDebug() << "Starting Bluetooth scan (LowEnergyMethod)...";
+    m_discoveryAgent->setLowEnergyDiscoveryTimeout(5000);
     m_discoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
     
     if (!m_scanTimer->isActive()) {
@@ -67,7 +93,7 @@ void BluetoothManager::startScanning()
 
 void BluetoothManager::stopScanning()
 {
-    //qDebug() << "Stopping Bluetooth scan...";
+    qDebug() << "Stopping Bluetooth scan...";
     m_isActive = false;
     m_scanTimer->stop();
     if (m_discoveryAgent->isActive()) {
@@ -79,7 +105,7 @@ void BluetoothManager::disconnect()
 {
     stopScanning();
     if (m_controller) {
-        //qDebug() << "Disconnecting from BLE device...";
+        qDebug() << "Disconnecting from BLE device...";
         m_controller->disconnectFromDevice();
         m_targetDevice = QBluetoothDeviceInfo();
     }
@@ -92,14 +118,30 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 {
     // Look for devices with "USB Power" or your specific device name
     QString deviceName = info.name();
-    // qDebug() << "Found device:" << deviceName << " -";
-    if (deviceName.contains("MacWake-USBPowerMeter", Qt::CaseInsensitive)) {
-        auto deviceMgr = dynamic_cast<DeviceManager*>(this->parent());
+    QList<QBluetoothUuid> serviceUuids = info.serviceUuids();
+    
+    // Check if it matches our target name
+    bool isTarget = deviceName.contains("MacWake-USBPowerMeter", Qt::CaseInsensitive) ||
+                    deviceName.contains("USB Power", Qt::CaseInsensitive) ||
+                    deviceName.contains("Power Meter", Qt::CaseInsensitive);
+    
+    // Also check if it advertises our target service UUID
+    if (!isTarget) {
+        for (const auto& uuid : serviceUuids) {
+            if (uuid.toString(QUuid::WithBraces).compare(SERVICE_UUID, Qt::CaseInsensitive) == 0) {
+                isTarget = true;
+                break;
+            }
+        }
+    }
+
+    if (isTarget) {
         if (!this->m_isActive) {
-            qDebug() << "Ignoring found device - not active";
+            qDebug() << "Ignoring found target device - not active";
             return;
         }
-        //qDebug() << "Found target device:" << deviceName << info.address();
+        qDebug() << "Target device identified:" << (deviceName.isEmpty() ? "<no name>" : deviceName) 
+                 << "[" << info.address().toString() << "]";
         m_targetDevice = info;
         m_discoveryAgent->stop();
         connectToDevice(info);
@@ -108,7 +150,7 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 
 void BluetoothManager::onScanFinished()
 {
-    //qDebug() << "Bluetooth scan finished";
+    qDebug() << "Bluetooth scan finished";
     if (!m_isConnected && m_targetDevice.isValid()) {
         qDebug() << "Connecting to target device " << m_targetDevice.name();
         connectToDevice(m_targetDevice);
@@ -138,19 +180,19 @@ void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
         emit deviceDisconnected();
     });
     
-    //qDebug() << "Connecting to device:" << device.name();
+    qDebug() << "Connecting to device:" << device.name();
     m_controller->connectToDevice();
 }
 
 void BluetoothManager::onControllerConnected()
 {
-    //qDebug() << "BLE Controller connected";
+    qDebug() << "BLE Controller connected";
     m_controller->discoverServices();
 }
 
 void BluetoothManager::onControllerDisconnected()
 {
-    //qDebug() << "BLE Controller disconnected";
+    qDebug() << "BLE Controller disconnected";
     m_isConnected = false;
     emit deviceDisconnected();
     
@@ -160,21 +202,21 @@ void BluetoothManager::onControllerDisconnected()
 
 void BluetoothManager::onServiceDiscovered(const QBluetoothUuid &uuid)
 {
-    //qDebug() << "Service discovered:" << uuid.toString();
+    qDebug() << "Service discovered:" << uuid.toString();
     if (uuid.toString(QUuid::WithBraces) == SERVICE_UUID) {
-        //qDebug() << "Found target service";
+        qDebug() << "Found target service";
     }
 }
 
 void BluetoothManager::onServiceDiscoveryFinished()
 {
-    //qDebug() << "Service discovery finished";
+    qDebug() << "Service discovery finished";
     
     QBluetoothUuid serviceUuid(SERVICE_UUID);
     m_service = m_controller->createServiceObject(serviceUuid, this);
     
     if (!m_service) {
-        //qDebug() << "Target service not found";
+        qDebug() << "Target service not found";
         return;
     }
     
@@ -204,15 +246,15 @@ void BluetoothManager::setupService()
     m_dataCharacteristic = m_service->characteristic(characteristicUuid);
     
     if (!m_dataCharacteristic.isValid()) {
-        //qDebug() << "Data characteristic not found";
+        qDebug() << "Data characteristic not found";
         return;
     }
     
-    //qDebug() << "Found characteristic with properties:" << m_dataCharacteristic.properties();
+    qDebug() << "Found characteristic with properties:" << m_dataCharacteristic.properties();
     
     // Enable notifications if supported
     if (m_dataCharacteristic.properties() & QLowEnergyCharacteristic::Notify) {
-        //qDebug() << "Enabling notifications...";
+        qDebug() << "Enabling notifications...";
         
         // Find the Client Characteristic Configuration Descriptor (CCCD)
         QLowEnergyDescriptor cccd = m_dataCharacteristic.descriptor(
@@ -221,15 +263,15 @@ void BluetoothManager::setupService()
         if (cccd.isValid()) {
             // Enable notifications by writing 0x0100 to CCCD
             m_service->writeDescriptor(cccd, QByteArray::fromHex("0100"));
-            //qDebug() << "Notification enabled via CCCD";
+            qDebug() << "Notification enabled via CCCD";
         } else {
-            //qDebug() << "CCCD not found - notifications may not work";
+            qDebug() << "CCCD not found - notifications may not work";
         }
     }
     
     // Check if indications are supported as fallback
     else if (m_dataCharacteristic.properties() & QLowEnergyCharacteristic::Indicate) {
-        //qDebug() << "Enabling indications...";
+        qDebug() << "Enabling indications...";
         
         QLowEnergyDescriptor cccd = m_dataCharacteristic.descriptor(
             QBluetoothUuid(static_cast<quint16>(0x2902)));
@@ -237,17 +279,17 @@ void BluetoothManager::setupService()
         if (cccd.isValid()) {
             // Enable indications by writing 0x0200 to CCCD
             m_service->writeDescriptor(cccd, QByteArray::fromHex("0200"));
-            //qDebug() << "Indications enabled via CCCD";
+            qDebug() << "Indications enabled via CCCD";
         }
     }
     else {
-        //qDebug() << "Characteristic doesn't support notifications or indications";
+        qDebug() << "Characteristic doesn't support notifications or indications";
     }
     
     m_isConnected = true;
     emit deviceConnected(m_targetDevice.name());
     
-    //qDebug() << "BLE service setup complete";
+    qDebug() << "BLE service setup complete";
 }
 
 void BluetoothManager::onCharacteristicRead(const QLowEnergyCharacteristic &characteristic, const QByteArray &value)

@@ -34,6 +34,7 @@ public:
 
     // Public getter for settings
     [[nodiscard]] OsdSettings *getSettings() const { return settings; }
+    [[nodiscard]] DeviceManager *getDeviceManager() const { return m_deviceManager; }
 
     void onPrimaryFontChanged(const QFont &font);
 
