@@ -53,14 +53,28 @@ bool DeviceManager::tryConnect(const QString &portName) {
     m_bluetoothManager->startScanning();
     return true;
   }
-  if (portName.toLower().contains("usb") || portName.startsWith("COM")) {
+
+  // If it's not BLE, try to treat it as a serial port.
+  // We check for some common serial port indicators, or if it looks like a path on Linux/macOS.
+  if (portName.startsWith("/") || portName.toLower().contains("usb") ||
+      portName.startsWith("COM", Qt::CaseInsensitive) ||
+      portName.startsWith("tty", Qt::CaseInsensitive)) {
+    
+    // Find the correct QSerialPortInfo
+    const auto ports = QSerialPortInfo::availablePorts();
+    for (const auto &port : ports) {
+      if (port.portName() == portName || port.systemLocation() == portName) {
+        return m_serialManager->connectSerialDevice(port);
+      }
+    }
+    
+    // Fallback if not found in availablePorts but looks like a valid path/name
     QSerialPortInfo serialPortInfo(portName);
     return m_serialManager->connectSerialDevice(serialPortInfo);
   } else {
-    // qDebug() << "DeviceManager::tryConnect: Unknown port type: " << portName;
+    qDebug() << "DeviceManager::tryConnect: Unknown port type: " << portName;
     return false;
   }
-  return false;
 }
 bool DeviceManager::isBLEAutoConnect() const {
   return m_isBluetoothConnected;

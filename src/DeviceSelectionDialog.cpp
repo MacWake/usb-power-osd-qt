@@ -2,7 +2,6 @@
 
 #include "MainWindow.h"
 
-#include <QApplication>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSerialPortInfo>
@@ -16,30 +15,6 @@ DeviceSelectionDialog::DeviceSelectionDialog(QWidget *parent)
     setModal(true);
     setFixedSize(450, 280);
     
-    setupUI();
-    refreshSerialPorts();
-    updateControlStates();
-    
-    // Load last used device settings
-    QString lastDevice = m_parent->getSettings()->last_device;
-    if (lastDevice.startsWith("ble")) {
-        m_bluetoothRadio->setChecked(true);
-        m_selectedType = ConnectionType::BluetoothAuto;
-    } else {
-        m_serialRadio->setChecked(true);
-        m_selectedType = ConnectionType::SerialPort;
-        QString portName = lastDevice;
-        int index = m_serialPortCombo->findData(portName);
-        if (index >= 0) {
-            m_serialPortCombo->setCurrentIndex(index);
-        }
-    }
-    
-    updateControlStates();
-}
-
-void DeviceSelectionDialog::setupUI()
-{
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setSpacing(15);
     m_mainLayout->setContentsMargins(20, 20, 20, 20);
@@ -119,6 +94,26 @@ void DeviceSelectionDialog::setupUI()
             this, &DeviceSelectionDialog::onOkButtonClicked);
     connect(m_cancelButton, &QPushButton::clicked,
             this, &DeviceSelectionDialog::onCancelButtonClicked);
+    
+    refreshSerialPorts();
+    updateControlStates();
+    
+    // Load last used device settings
+    QString lastDevice = m_parent->getSettings()->last_device;
+    if (lastDevice.startsWith("ble")) {
+        m_bluetoothRadio->setChecked(true);
+        m_selectedType = ConnectionType::BluetoothAuto;
+    } else {
+        m_serialRadio->setChecked(true);
+        m_selectedType = ConnectionType::SerialPort;
+        QString portName = lastDevice;
+        int index = m_serialPortCombo->findData(portName);
+        if (index >= 0) {
+            m_serialPortCombo->setCurrentIndex(index);
+        }
+    }
+    
+    updateControlStates();
 }
 
 void DeviceSelectionDialog::refreshSerialPorts()
@@ -132,7 +127,7 @@ void DeviceSelectionDialog::refreshSerialPorts()
     } else {
         for (const auto &port : ports) {
             QString displayText = QString("%1 (%2)").arg(port.portName(), port.description());
-            m_serialPortCombo->addItem(displayText, port.portName());
+            m_serialPortCombo->addItem(displayText, port.systemLocation());
         }
         m_serialPortCombo->setEnabled(true);
     }

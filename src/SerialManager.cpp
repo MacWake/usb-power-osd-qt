@@ -11,6 +11,7 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qdatetime.h>
 #include <QException>
+#include "hexdump.h"
 
 // These should match your USB Power OSD V2 device VID/PID
 const quint16 SerialManager::TARGET_VENDOR_ID = 0x0483;  // STMicroelectronics
@@ -67,13 +68,12 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
   m_serialPort->setStopBits(QSerialPort::OneStop);
   m_serialPort->setFlowControl(QSerialPort::NoFlowControl);
 
-  // qDebug() << "Trying to connect to serial device:" << portInfo.portName();
+  qDebug() << "Trying to connect to serial device:" << portInfo.systemLocation();
   if (!m_serialPort->open(QIODevice::ReadWrite)) {
-    // qDebug() << "Failed to open serial port with 9600:" <<
-    // m_serialPort->errorString();
+    qDebug() << "Failed to open serial port with 9600:" <<m_serialPort->errorString();
     return false;
   }
-  // qDebug() << "Opened serial port with 9600:" << portInfo.portName();
+  qDebug() << "Opened serial port with 9600:" << portInfo.systemLocation();
   //  Test basic functionality
   if (!m_serialPort->isWritable() || !m_serialPort->isReadable()) {
     qDebug() << "Serial port opened but has limited functionality";
@@ -83,13 +83,11 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
 
   if (this->checkPLDProtocol()) {
     m_isConnected = true;
-    emit deviceConnected(portInfo.portName());
-    // qDebug() << "Connected to serial device type " << this->m_protocol << ":"
-    // << portInfo.portName();
+    emit deviceConnected(portInfo.systemLocation());
+    qDebug() << "Connected to serial device type " << this->m_protocol << ":"<< portInfo.systemLocation();
     return true;
   } else {
-    // qDebug() << "Cannot detect protocol with 9600 on serial device:" <<
-    // portInfo.portName();
+    qDebug() << "Cannot detect protocol with 9600 on serial device:" <<portInfo.systemLocation();
     m_serialPort->close();
     m_serialPort->setBaudRate(QSerialPort::Baud115200);
     if (!m_serialPort->open(QIODevice::ReadWrite)) {
@@ -99,7 +97,7 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
     }
     if (this->checkMacwakeProtocol()) {
       m_isConnected = true;
-      emit deviceConnected(portInfo.portName());
+      emit deviceConnected(portInfo.systemLocation());
       return true;
     }
     m_serialPort->close();
@@ -108,7 +106,7 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
 }
 
 void SerialManager::disconnect() {
-  //qDebug() << "Disconnecting from serial device";
+  qDebug() << "Disconnecting from serial device";
   try {
     if (m_serialPort->isOpen()) {
       m_serialPort->close();
@@ -206,25 +204,25 @@ bool SerialManager::waitForLineAvailable(int timeoutMs) {
 }
 
 bool SerialManager::checkPLDProtocol() {
-  // qDebug() << "Checking for PLD protocol...";
+  qDebug() << "Checking for PLD protocol...";
 
   if (!this->waitForLineAvailable(1000)) {
-    //std::cerr << "checkPLDProtocol: timeout 1" << std::endl;
+    std::cerr << "checkPLDProtocol: timeout 1" << std::endl;
     return false;
   }
   QByteArray line = m_serialPort->readLine();
-  // hexdump(line);
+  hexdump(line);
   if (line.size() < 8) {
-    // qDebug() << "line size: " << line.size() << " too small, read next line";
+    qDebug() << "line size: " << line.size() << " too small, read next line";
     if (!this->waitForLineAvailable(1000)) {
-      //std::cerr << "checkPLDProtocol: timeout 2" << std::endl;
+      std::cerr << "checkPLDProtocol: timeout 2" << std::endl;
       return false;
     }
     line = m_serialPort->readLine();
-    // hexdump(line);
+    hexdump(line);
   }
   if (line.size() < 8) {
-    // qDebug() << "line size: " << line.size() << " still too small, failure";
+    qDebug() << "line size: " << line.size() << " still too small, failure";
     return false;
   }
   if (line.endsWith('\n')) {
@@ -242,7 +240,7 @@ bool SerialManager::checkPLDProtocol() {
     // qDebug() << "PLD20 detected (by length)";
     m_protocol = SerialProtocol::PLD20;
   } else {
-    //std::cerr << "checkPLDProtocol: Cannot obtain frame type" << std::endl;
+    std::cerr << "checkPLDProtocol: Cannot obtain frame type" << std::endl;
     return false;
   }
   return true;
