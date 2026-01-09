@@ -178,6 +178,21 @@ void DeviceSelectionDialog::onOkButtonClicked()
                                 "Please select a valid serial port.");
             return;
         }
+        
+        // Protocol verification
+        if (m_parent && m_parent->getDeviceManager()) {
+            this->setCursor(Qt::WaitCursor);
+            bool success = m_parent->getDeviceManager()->tryConnect(m_selectedSerialPort);
+            this->setCursor(Qt::ArrowCursor);
+            
+            if (!success) {
+                QMessageBox::critical(this, "Protocol Verification Failed", 
+                                     QString("Failed to verify protocol on %1. "
+                                             "Please ensure the device is connected and using a supported protocol.")
+                                     .arg(m_selectedSerialPort));
+                return;
+            }
+        }
     }
     accept();
 }

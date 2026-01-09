@@ -6,8 +6,11 @@
 
 DeviceManager::DeviceManager(QObject *parent)
     : QObject(parent), m_bluetoothManager(new BluetoothManager(this)),
-      m_serialManager(new SerialManager(this)),
+      m_serialManager(new SerialManager()),
+      m_serialThread(new QThread(this)),
       m_powerMonitor(new PowerMonitor(this)) {
+  m_serialManager->moveToThread(m_serialThread);
+
   // Connect Bluetooth signals
   connect(m_bluetoothManager, &BluetoothManager::deviceConnected, this,
           &DeviceManager::onBluetoothDeviceConnected);
@@ -34,11 +37,19 @@ DeviceManager::DeviceManager(QObject *parent)
   // Forward power data signals from PowerMonitor (for serial data)
   connect(m_powerMonitor, &PowerMonitor::powerDataReceived, this,
           [this](const PowerData &data) { emit powerDataReceived(data); });
+
+  m_serialThread->start();
+}
+
+DeviceManager::~DeviceManager() {
+  m_serialThread->quit();
+  m_serialThread->wait();
+  delete m_serialManager;
 }
 
 void DeviceManager::startBtScanning() {
   m_bluetoothManager->startScanning();
-  m_serialManager->disconnect();
+  QMetaObject::invokeMethod(m_serialManager, "disconnect", Qt::QueuedConnection);
 }
 
 void DeviceManager::stopBtScanning() {
@@ -55,26 +66,15 @@ bool DeviceManager::tryConnect(const QString &portName) {
   }
 
   // If it's not BLE, try to treat it as a serial port.
-  // We check for some common serial port indicators, or if it looks like a path on Linux/macOS.
-  if (portName.startsWith("/") || portName.toLower().contains("usb") ||
-      portName.startsWith("COM", Qt::CaseInsensitive) ||
-      portName.startsWith("tty", Qt::CaseInsensitive)) {
-    
-    // Find the correct QSerialPortInfo
-    const auto ports = QSerialPortInfo::availablePorts();
-    for (const auto &port : ports) {
-      if (port.portName() == portName || port.systemLocation() == portName) {
-        return m_serialManager->connectSerialDevice(port);
-      }
-    }
-    
-    // Fallback if not found in availablePorts but looks like a valid path/name
-    QSerialPortInfo serialPortInfo(portName);
-    return m_serialManager->connectSerialDevice(serialPortInfo);
-  } else {
-    qDebug() << "DeviceManager::tryConnect: Unknown port type: " << portName;
-    return false;
+  bool result = false;
+  if (QMetaObject::invokeMethod(m_serialManager, "tryConnect",
+                               Qt::BlockingQueuedConnection,
+                               Q_RETURN_ARG(bool, result),
+                               Q_ARG(QString, portName))) {
+    return result;
   }
+
+  return false;
 }
 bool DeviceManager::isBLEAutoConnect() const {
   return m_isBluetoothConnected;
@@ -84,7 +84,7 @@ void DeviceManager::onBluetoothDeviceConnected(const QString &deviceName) {
   m_isBluetoothConnected = true;
   if (this->m_isSerialConnected) {
     m_isSerialConnected = false;
-    this->m_serialManager->disconnect();
+    QMetaObject::invokeMethod(m_serialManager, "disconnect", Qt::QueuedConnection);
   }
   this->m_settings->last_device = "ble";
   this->m_settings->saveSettings();

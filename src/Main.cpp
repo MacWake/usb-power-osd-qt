@@ -1,9 +1,11 @@
 #include "MainWindow.h"
+#include "PowerData.h"
 #include <QApplication>
 #include <QDir>
 
 // NOLINT(clang-tidy-static-accessed-through-instance)
 int main(int argc, char *argv[]) {
+  qRegisterMetaType<PowerData>();
   QApplication app(argc, argv);
 
   app.setApplicationName("USB Power OSD");

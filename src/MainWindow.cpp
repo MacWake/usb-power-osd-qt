@@ -130,6 +130,8 @@ void MainWindow::toggleEnergy() const {
 
 void MainWindow::showDeviceSelectionDialog() {
     this->m_reconnect_timer->stop();
+    m_deviceManager->stopBtScanning();
+
     if (!m_deviceSelectionDialog) {
         m_deviceSelectionDialog = new DeviceSelectionDialog(this);
     }
@@ -141,40 +143,22 @@ void MainWindow::showDeviceSelectionDialog() {
         qDebug() << "Selected connection type: " << static_cast<int>(connectionType);
         if (connectionType ==
             DeviceSelectionDialog::ConnectionType::BluetoothAuto) {
-            // qDebug() << "Bluetooth auto discovery is enabled";
-
             statusBar()->showMessage("Scanning for Bluetooth devices...");
             m_deviceManager->startBtScanning();
             this->settings->last_device = "ble";
             this->settings->saveSettings();
         } else if (connectionType ==
                    DeviceSelectionDialog::ConnectionType::SerialPort) {
-            // qDebug() << "Selected serial port; stopping/disconnecting ble device";
             m_deviceManager->stopBtScanning();
             QString selectedPort = m_deviceSelectionDialog->getSelectedSerialPort();
             qDebug() << "Selected serial port: " << selectedPort;
             this->settings->last_device = selectedPort;
             this->settings->saveSettings();
-            statusBar()->showMessage(
-                QString("Connecting to %1...").arg(selectedPort));
-            qDebug() << "tryConnect() to " << selectedPort;
-            if (!m_deviceManager->tryConnect(selectedPort)) {
-                qDebug() << "tryConnect() failed for " << selectedPort;
-                statusBar()->showMessage("Failed to connect to " + selectedPort);
-            } else {
-                qDebug() << "tryConnect() succeeded for " << selectedPort;
-                return;
-            }
-        } else {
-            // qDebug() << "No connection type selected";
-            return;
+            statusBar()->showMessage(QString("Connected to %1").arg(selectedPort));
         }
     } else {
-        // User cancelled
-        // statusBar()->showMessage("No device selected.");
-        // QTimer::singleShot(2000, QApplication::instance(), &QApplication::quit);
+        this->startReconnectTimer();
     }
-    // QTimer::singleShot(100, [this] { MainWindow::connectLastDevice(false); });
 }
 
 // ReSharper disable CppDFAMemoryLeak

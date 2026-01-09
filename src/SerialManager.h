@@ -22,18 +22,20 @@ public:
     explicit SerialManager(QObject *parent = nullptr);
     ~SerialManager() override;
     
-    bool connectSerialDevice(const QSerialPortInfo &portInfo);
-    void disconnect();
+    Q_INVOKABLE bool connectSerialDevice(const QSerialPortInfo &portInfo);
+    Q_INVOKABLE void disconnect();
 
 signals:
     void deviceConnected(const QString &deviceName);
     void deviceDisconnected();
     void dataReceived(PowerData data);
 
+public slots:
+    bool tryConnect(const QString &portName);
+
 private slots:
     void onSerialDataReady();
-  void onSerialError(QSerialPort::SerialPortError error);
-    bool tryConnect(const QString &portName);
+    void onSerialError(QSerialPort::SerialPortError error);
     bool waitForLineAvailable(int timeoutMs);
 
   private:
