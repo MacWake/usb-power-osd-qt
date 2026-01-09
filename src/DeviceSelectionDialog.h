@@ -32,7 +32,6 @@ private slots:
   void onRefreshSerialPorts();
 
 private:
-  void setupUI();
   void updateControlStates();
 
   // UI components

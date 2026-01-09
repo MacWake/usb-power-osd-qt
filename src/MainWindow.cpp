@@ -135,11 +135,10 @@ void MainWindow::showDeviceSelectionDialog() {
     }
 
     if (m_deviceSelectionDialog->exec() == QDialog::Accepted) {
-        // qDebug() << "Accepted DeviceSelectionDialog";
+        qDebug() << "Accepted DeviceSelectionDialog";
         auto connectionType = m_deviceSelectionDialog->getSelectedConnectionType();
 
-        // qDebug() << "Selected connection type: " <<
-        // static_cast<int>(connectionType);
+        qDebug() << "Selected connection type: " << static_cast<int>(connectionType);
         if (connectionType ==
             DeviceSelectionDialog::ConnectionType::BluetoothAuto) {
             // qDebug() << "Bluetooth auto discovery is enabled";
@@ -153,17 +152,17 @@ void MainWindow::showDeviceSelectionDialog() {
             // qDebug() << "Selected serial port; stopping/disconnecting ble device";
             m_deviceManager->stopBtScanning();
             QString selectedPort = m_deviceSelectionDialog->getSelectedSerialPort();
-            // qDebug() << "Selected serial port: " << selectedPort;
+            qDebug() << "Selected serial port: " << selectedPort;
             this->settings->last_device = selectedPort;
             this->settings->saveSettings();
             statusBar()->showMessage(
                 QString("Connecting to %1...").arg(selectedPort));
-            // qDebug() << "tryConnect() to " << selectedPort;
+            qDebug() << "tryConnect() to " << selectedPort;
             if (!m_deviceManager->tryConnect(selectedPort)) {
-                // qDebug() << "tryConnect() failed for " << selectedPort;
+                qDebug() << "tryConnect() failed for " << selectedPort;
                 statusBar()->showMessage("Failed to connect to " + selectedPort);
             } else {
-                // qDebug() << "tryConnect() succeeded for " << selectedPort;
+                qDebug() << "tryConnect() succeeded for " << selectedPort;
                 return;
             }
         } else {

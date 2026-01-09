@@ -31,9 +31,14 @@ Compatible with USB Power OSD V2-BLE devices that support:
 ```bash
 sudo apt-get install qt6-base-dev qt6-bluetooth-dev qt6-serialport-dev cmake build-essential libbluetooth-dev
 ```
-#### Debian Noble
+#### Ubuntu Noble
 ```bash
 sudo apt install qt6-serialbus-dev libxcb-xkb-dev
+```
+#### Debian
+```bash
+sudo apt-get install qt6-base-dev qt6-connectivity-dev qt6-serialport-dev cmake build-essential libbluetooth-dev
+```
 #### macOS
 ```bash
 brew install qt6 cmake
