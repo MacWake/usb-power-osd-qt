@@ -128,8 +128,17 @@ jobs:
       - name: Get Next Version
         id: get_version
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NEXT_VERSION=$(npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/commit-analyzer --package @semantic-release/github --package @semantic-release/release-notes-generator semantic-release --dry-run 2>/dev/null | grep -o "The next release version is [0-9]\+\.[0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+" || echo "0.1.0")
+          NEXT_VERSION=$(npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/commit-analyzer --package @semantic-release/github --package @semantic-release/release-notes-generator semantic-release --dry-run 2>/dev/null | grep -o "The next release version is [0-9]\+\.[0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+" || echo "")
+          if [ -z "$NEXT_VERSION" ]; then
+            # Fallback: get the current version from git tags
+            NEXT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+            if [ -z "$NEXT_VERSION" ]; then
+              NEXT_VERSION="0.1.0"
+            fi
+          fi
           echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
           echo "Next version will be: $NEXT_VERSION"
 
@@ -258,7 +267,7 @@ jobs:
           
           # Create a simple tar.gz archive
           cd ${{github.workspace}}/deploy
-          tar -czf ../USB-Power-OSD-Linux-${{ matrix.distro }}.tar.gz linux/
+          tar -czf ../USB-Power-OSD-Linux-${{ steps.get_version.outputs.version }}-${{ matrix.distro }}.tar.gz linux/
 
       - name: Create DEB and RPM packages (Linux)
         if: startsWith(matrix.name, 'Linux')
@@ -283,8 +292,7 @@ jobs:
           path: ${{github.workspace}}/build/*.rpm
           if-no-files-found: error
 
-      # Windows deployment - bundle Qt libraries
-      - name: Deploy Qt libraries (Windows)
+      - name: Create zip archive (Windows)
         if: matrix.name == 'Windows'
         run: |
           # Create deployment directory
@@ -297,7 +305,15 @@ jobs:
           
           # Create a zip archive
           cd ${{github.workspace}}\deploy
-          powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows.zip"
+          powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows-${{ steps.get_version.outputs.version }}.zip"
+
+      - name: Upload Windows artifacts
+        if: matrix.name == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: ${{github.workspace}}/USB-Power-OSD-Windows-${{ steps.get_version.outputs.version }}.zip
+          if-no-files-found: error
 
       - name: Create MSI with CPack
         if: matrix.name == 'Windows'
@@ -351,7 +367,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-build-${{ matrix.distro }}
-          path: ${{github.workspace}}/USB-Power-OSD-Linux-${{ matrix.distro }}.tar.gz
+          path: ${{github.workspace}}/USB-Power-OSD-Linux-${{ steps.get_version.outputs.version }}-${{ matrix.distro }}.tar.gz
           if-no-files-found: error
 
       - name: Deploy Qt libraries (macOS)
@@ -376,17 +392,17 @@ jobs:
           /usr/bin/codesign --verify --deep --strict --verbose=2 "${{github.workspace}}/build/USB-Power-OSD.app"
           /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB-Power-OSD.app"
 
-      - name: Notarize the macOS application
+      - name: Create ZIP archive (macOS)
         if: matrix.name == 'macOS'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
         run: |
           # Create a ZIP archive of the app
-          ditto -c -k --keepParent "${{github.workspace}}/build/USB-Power-OSD.app" "${{github.workspace}}/build/USB-Power-OSD.zip"
+          ditto -c -k --keepParent "${{github.workspace}}/build/USB-Power-OSD.app" "${{github.workspace}}/build/USB-Power-OSD-${{ steps.get_version.outputs.version }}.zip"
           
-          # Notarize the app
-          xcrun notarytool submit "${{github.workspace}}/build/USB-Power-OSD.zip" \
+          # Notarize the app via ZIP
+          xcrun notarytool submit "${{github.workspace}}/build/USB-Power-OSD-${{ steps.get_version.outputs.version }}.zip" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_ID_PASSWORD" \
             --team-id "${{ vars.APPLE_TEAM_ID }}" \
@@ -394,6 +410,14 @@ jobs:
           
           # Staple the notarization ticket
           xcrun stapler staple "${{github.workspace}}/build/USB-Power-OSD.app"
+
+      - name: Upload macOS zip
+        if: matrix.name == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-zip
+          path: ${{github.workspace}}/build/USB-Power-OSD-${{ steps.get_version.outputs.version }}.zip
+          if-no-files-found: error
 
       - name: Upload macOS artifacts
         if: matrix.name == 'macOS'
@@ -406,13 +430,13 @@ jobs:
       - name: Create dmg
         if: matrix.name == 'macOS'
         run: |
-          hdiutil create -volname "MacWake USB Power OSD" -srcfolder "build/USB-Power-OSD.app" "build/Macwake USB Power.dmg"
+          hdiutil create -volname "MacWake USB Power OSD" -srcfolder "build/USB-Power-OSD.app" "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg"
 
       # Notarize dmg
       - name: Notarize app
         if: matrix.name == 'macOS'
         run: |
-          xcrun notarytool submit "build/Macwake USB Power.dmg" \
+          xcrun notarytool submit "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_PASSWORD" \
@@ -426,14 +450,14 @@ jobs:
       - name: Staple app
         if: matrix.name == 'macOS'
         run: |
-          xcrun stapler staple "build/Macwake USB Power.dmg"
+          xcrun stapler staple "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg"
 
       - name: Upload artifact
         if: matrix.name == 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: macOS Application Image
-          path: "build/Macwake USB Power.dmg"
+          path: "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg"
 
   release:
     name: Publish New Release

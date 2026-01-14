@@ -11,6 +11,8 @@
       {
         "assets": [
           { "path": "artifacts/windows-msi/*.msi", "label": "Windows Installer" },
+          { "path": "artifacts/windows-zip/*.zip", "label": "Windows Portable" },
+          { "path": "artifacts/macos-zip/*.zip", "label": "macOS Portable" },
           { "path": "artifacts/linux-build-*/*.tar.gz" },
           { "path": "artifacts/linux-deb-*/*.deb" },
           { "path": "artifacts/linux-rpm-*/*.rpm" },
