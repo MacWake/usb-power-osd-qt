@@ -145,7 +145,7 @@ void DeviceSelectionDialog::onConnectionTypeChanged()
 
 void DeviceSelectionDialog::updateControlStates()
 {
-    bool isSerialSelected = (m_selectedType == ConnectionType::SerialPort);
+    bool isSerialSelected = m_selectedType == ConnectionType::SerialPort;
     
     m_serialPortLabel->setEnabled(isSerialSelected);
     m_serialPortCombo->setEnabled(isSerialSelected && m_serialPortCombo->count() > 0);

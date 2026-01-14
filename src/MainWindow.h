@@ -24,8 +24,6 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    void tryConnectLastDevice();
-
     explicit MainWindow(OsdSettings *settings, QWidget *parent = nullptr);
 
     ~MainWindow() override;

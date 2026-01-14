@@ -29,10 +29,9 @@ signals:
 private slots:
   void onBluetoothDeviceConnected(const QString &deviceName);
   void onBluetoothDeviceDisconnected();
-  void onBluetoothDataReceived(const QByteArray &data);
   void onSerialDeviceConnected(const QString &deviceName);
   void onSerialDeviceDisconnected();
-  void onSerialDataReceived(PowerData data);
+  void onSerialDataReceived(const PowerData &data);
 
 private:
   BluetoothManager *m_bluetoothManager;

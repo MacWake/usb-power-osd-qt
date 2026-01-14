@@ -54,7 +54,7 @@ public:
             for (qint64 i = 0; i < samplesToRead; ++i) {
                 double freq = m_frequency.load();
                 double amp = m_amplitude.load();
-                float sample = static_cast<float>(std::sin(m_phase) * amp);
+                auto sample = static_cast<float>(std::sin(m_phase) * amp);
                 for (int j = 0; j < channelCount; ++j) {
                     *ptr++ = sample;
                 }

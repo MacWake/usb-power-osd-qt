@@ -44,7 +44,7 @@ MainWindow::MainWindow(OsdSettings *settings,
 
     // Setup timers
     m_updateTimer->setInterval(200);
-    connect(m_updateTimer, &QTimer::timeout, [this]() { this->updateLabels(); });
+    connect(m_updateTimer, &QTimer::timeout, [this] { this->updateLabels(); });
     m_statusBarHideTimer->setSingleShot(true); // Only fire once
     connect(m_statusBarHideTimer, &QTimer::timeout, this,
             &MainWindow::hideStatusBar);
@@ -111,12 +111,7 @@ void MainWindow::connectLastDevice(bool reconnecting = false) {
                 this->m_reconnect_timer->stop();
             }
             return;
-        } else {
-            // qDebug() << "Failed to connect to last device " <<
-            // settings->last_device;
         }
-    } else {
-        // qDebug() << "No last device found";
     }
     if (!reconnecting) {
         this->showDeviceSelectionDialog();

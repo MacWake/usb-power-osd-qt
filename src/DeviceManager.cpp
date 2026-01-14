@@ -118,12 +118,6 @@ void DeviceManager::onSerialDeviceDisconnected() {
     }
 }
 
-void DeviceManager::onBluetoothDataReceived(const QByteArray &data) {
-  // This is now handled directly in BluetoothManager
-  // but you can still process raw data here if needed
-  // qDebug() << "Raw Bluetooth data received:" << data;
-}
-
-void DeviceManager::onSerialDataReceived(PowerData data) {
+void DeviceManager::onSerialDataReceived(const PowerData &data) {
   emit powerDataReceived(data);
 }

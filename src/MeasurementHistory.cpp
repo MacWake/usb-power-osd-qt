@@ -184,8 +184,7 @@ double MeasurementHistory::calculateMedianLastN(std::size_t lastN, ValueExtracto
         // Even number of elements: average of middle two
         const std::size_t mid = values.size() / 2;
         return (values[mid - 1] + values[mid]) / 2.0;
-    } else {
-        // Odd number of elements: middle element
-        return values[values.size() / 2];
     }
+    // Odd number of elements: middle element
+    return values[values.size() / 2];
 }

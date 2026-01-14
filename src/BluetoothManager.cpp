@@ -26,6 +26,7 @@ BluetoothManager::BluetoothManager(QObject *parent)
     , m_service(nullptr)
     , m_scanTimer(new QTimer(this))
 {
+    this->m_isActive = false;
     connect(m_discoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
             this, &BluetoothManager::onDeviceDiscovered);
     connect(m_discoveryAgent, &QBluetoothDeviceDiscoveryAgent::errorOccurred,
@@ -37,7 +38,7 @@ BluetoothManager::BluetoothManager(QObject *parent)
     
     // Rescan periodically
     m_scanTimer->setInterval(10000); // 10 seconds
-    connect(m_scanTimer, &QTimer::timeout, [this]() {
+    connect(m_scanTimer, &QTimer::timeout, [this] {
         if (!m_isConnected && !m_discoveryAgent->isActive()) {
             startScanning();
         }
@@ -48,7 +49,6 @@ BluetoothManager::BluetoothManager(QObject *parent)
     qDebug() << "Found" << adapters.count() << "local Bluetooth adapters:";
     for (const QBluetoothHostInfo &adapter : adapters) {
         QBluetoothLocalDevice localDevice(adapter.address());
-        QString features = "Features:";
         if (localDevice.isValid()) {
             // Check for BLE support (Qt 5.7+)
             // QBluetoothDeviceDiscoveryAgent::LowEnergyMethod is used in startScanning

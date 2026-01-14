@@ -114,7 +114,7 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
                    0.1, 0.0}) {
     if (yy >= minCurrent && yy <= maxCurrent) {
       const int y = graphTop +
-        (int)((maxCurrent - yy) / (maxCurrent - minCurrent) * graphHeight);
+        static_cast<int>((maxCurrent - yy) / (maxCurrent - minCurrent) * graphHeight);
 
       p.drawLine(1, y, width() - 1, y);
       if (yy > 0.01)
@@ -160,8 +160,8 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
 
     // Scale to widget coordinates
     const int x = width() - 1 - i; // Newest on right, oldest on left
-    const int y = graphTop + (int)((maxCurrent - current) /
-                                   (maxCurrent - minCurrent) * graphHeight);
+    const int y = graphTop + static_cast<int>((maxCurrent - current) /
+                                              (maxCurrent - minCurrent) * graphHeight);
 
     QPointF currentPoint(x, y);
 

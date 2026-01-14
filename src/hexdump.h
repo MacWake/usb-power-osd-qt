@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 static void hexdump(const char *buffer) {
     bool isEof = false;
     bool isEof2 = false;

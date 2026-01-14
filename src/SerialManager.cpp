@@ -260,9 +260,10 @@ bool SerialManager::checkPLDProtocol() {
       if (line.at(8) == 28) {
         m_protocol = SerialProtocol::PLD28;
         return true;
-      } else if (line.at(8) == 20) {
-        m_protocol = SerialProtocol::PLD20;
-        return true;
+      }
+      if (line.at(8) == 20) {
+          m_protocol = SerialProtocol::PLD20;
+          return true;
       }
     } else if (line.length() == 8) {
       m_protocol = SerialProtocol::PLD20;
