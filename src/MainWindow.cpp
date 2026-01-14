@@ -9,6 +9,7 @@
 #include <QTimer>
 #include <QWidget>
 #include <QDebug>
+#include <cmath>
 
 MainWindow::MainWindow(OsdSettings *settings,
                        QWidget *parent) // NOLINT(*-pro-type-member-init)
@@ -243,6 +244,12 @@ void MainWindow::setupUI() {
     fileMenu->addAction(resetBaseCurrentAction);
     fileMenu->addAction(resetHistoryAction);
 
+    QAction *audioAction = fileMenu->addAction(tr("Audio Output"));
+    audioAction->setCheckable(true);
+    audioAction->setChecked(settings->is_audio_enabled);
+    audioAction->setShortcut(QKeySequence("a"));
+    connect(audioAction, &QAction::toggled, this, &MainWindow::toggleAudio);
+
     fileMenu->addSeparator();
     fileMenu->addAction("E&xit", this, &QWidget::close);
 
@@ -331,14 +338,39 @@ void MainWindow::onPowerDataReceived(const PowerData &data) {
     this->lastDataRaw = data;
     static bool lastWasInvalid = false;
     auto norm_data = this->normalize(data);
+
     if (norm_data.current < settings->min_current || norm_data.voltage < 2.0) {
         if (!lastWasInvalid) {
             this->m_history->push(norm_data);
             lastWasInvalid = true;
         }
+        if (m_audioGenerator) {
+            m_audioGenerator->setAmplitude(0.0);
+        }
     } else {
         lastWasInvalid = false;
         this->m_history->push(norm_data);
+
+        if (settings->is_audio_enabled && m_audioGenerator) {
+            // Frequency: 400Hz to 4kHz depending on current (0 to say 5A)
+            // Use sqrt for higher sensitivity at low currents
+            double currentA = std::abs(norm_data.current);
+            double normalizedCurrent = std::min(currentA / 5.0, 1.0);
+            double freq = 400.0 + (4000.0 - 400.0) * std::sqrt(normalizedCurrent);
+            m_audioGenerator->setFrequency(freq);
+
+            // Amplitude: Compare stddev of last 10 against last 3
+            double stddev10 = m_history->getCurrentStdDevLastN(10);
+            double stddev3 = m_history->getCurrentStdDevLastN(3);
+
+            // If stddev3 is much higher than stddev10, it means it's noisier now.
+            // A common way to detect change/noise is the difference.
+            double diff = std::abs(stddev3 - stddev10);
+
+            // Assume diff of 50mA is "full" volume (0.1)
+            double amp = std::min(diff / 0.05, 1.0) * 0.1;
+            m_audioGenerator->setAmplitude(amp);
+        }
     }
 }
 
@@ -387,6 +419,9 @@ void MainWindow::updateLabels() {
 }
 
 void MainWindow::updateUINoData() {
+    if (m_audioGenerator) {
+        m_audioGenerator->setAmplitude(0.0);
+    }
     double totalMinCurrent;
     double totalMaxCurrent;
     this->m_history->minMaxCurrentLastN(this->m_history->size(), totalMinCurrent,
@@ -487,4 +522,28 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 void MainWindow::showAboutDialog() {
     AboutDialog aboutDialog(this);
     aboutDialog.exec();
+}
+
+void MainWindow::toggleAudio() {
+    settings->is_audio_enabled = !settings->is_audio_enabled;
+    settings->saveSettings();
+
+    if (settings->is_audio_enabled) {
+        if (!m_audioSink) {
+            QAudioFormat format;
+            format.setSampleRate(44100);
+            format.setChannelCount(1);
+            format.setSampleFormat(QAudioFormat::Float);
+
+            m_audioGenerator = new AudioGenerator(format, this);
+            m_audioSink = new QAudioSink(format, this);
+        }
+        m_audioGenerator->start();
+        m_audioSink->start(m_audioGenerator);
+    } else {
+        if (m_audioSink) {
+            m_audioSink->stop();
+            m_audioGenerator->stop();
+        }
+    }
 }

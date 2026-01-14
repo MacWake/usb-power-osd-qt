@@ -17,6 +17,7 @@ class OsdSettings : public QSettings {
 public:
     bool always_on_top = false;
     bool is_energy_displayed = false;
+    bool is_audio_enabled = false;
     int window_top;
     int window_left;
     int window_height;

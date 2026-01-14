@@ -129,60 +129,59 @@ void SerialManager::onSerialDataReady() {
   if (!m_isConnected) {
     return;
   }
-  if (!m_serialPort->canReadLine()) {
-    return;
+
+  while (m_serialPort->canReadLine()) {
+    auto line = m_serialPort->readLine();
+    if (line.endsWith('\n')) {
+      line = line.trimmed();
+    } else {
+      continue;
+    }
+    double voltage_quanta;
+    double current_quanta;
+
+    if (m_protocol == SerialProtocol::PLD28) {
+      voltage_quanta = 3.125;
+      current_quanta = 0.2; // with 50mR shunt
+    } else if (m_protocol == SerialProtocol::PLD20) {
+      voltage_quanta = 4.0;
+      current_quanta = 0.06; // with 100mR shunt
+    } else {
+      qDebug() << "Unhandled protocol " << m_protocol;
+      continue;
+    }
+    // printf("len=%d\n", static_cast<int>(strlen(serial_buffer)));
+    if (line.size() < 8 || line.size() > 11) {
+      qDebug() << "Bad packet length " << line.size();
+      continue;
+    }
+    int shunt_voltage = hex4_to_int16(line.sliced(0, 4).toStdString().c_str());
+    // printf("Shunt: %d\n", shunt_voltage);
+
+    auto bus_voltage = static_cast<double>(
+        hex4_to_uint16(line.sliced(4, 4).toStdString().c_str()));
+    // if (frame_type == OSD_MODE_20V && (bus_voltage & 0x0001)) {
+    //     std::cerr << "bad data?" << std::endl;
+    //     break;
+    // }
+
+    if (m_protocol == PLD20) {
+      bus_voltage /= 8.0;
+    }
+
+    int milliamps = abs(
+        static_cast<int>(static_cast<double>(shunt_voltage) * current_quanta));
+    int millivolts = static_cast<int>(bus_voltage * voltage_quanta);
+    // printf("Millivolts: %f\n", bus_voltage * voltage_quanta);
+
+    PowerData sample;
+    sample.current = milliamps / 1000.0;
+    sample.voltage = millivolts / 1000.0;
+    sample.power = sample.voltage * sample.current;
+    sample.timestamp = QDateTime::currentMSecsSinceEpoch();
+
+    emit dataReceived(sample);
   }
-
-  auto line = m_serialPort->readLine();
-  if (line.endsWith('\n')) {
-    line = line.trimmed();
-  } else {
-    return;
-  }
-  double voltage_quanta;
-  double current_quanta;
-
-  if (m_protocol == SerialProtocol::PLD28) {
-    voltage_quanta = 3.125;
-    current_quanta = 0.2; // with 50mR shunt
-  } else if (m_protocol == SerialProtocol::PLD20) {
-    voltage_quanta = 4.0;
-    current_quanta = 0.06; // with 100mR shunt
-  } else {
-    qDebug() << "Unhandled protocol " << m_protocol;
-    return;
-  }
-  // printf("len=%d\n", static_cast<int>(strlen(serial_buffer)));
-  if (line.size() < 8 || line.size() > 11) {
-    qDebug() << "Bad packet length " << line.size();
-    return;
-  }
-  int shunt_voltage = hex4_to_int16(line.sliced(0, 4).toStdString().c_str());
-  // printf("Shunt: %d\n", shunt_voltage);
-
-  auto bus_voltage = static_cast<double>(
-      hex4_to_uint16(line.sliced(4, 4).toStdString().c_str()));
-  // if (frame_type == OSD_MODE_20V && (bus_voltage & 0x0001)) {
-  //     std::cerr << "bad data?" << std::endl;
-  //     break;
-  // }
-
-  if (m_protocol == PLD20) {
-    bus_voltage /= 8.0;
-  }
-
-  int milliamps = abs(
-      static_cast<int>(static_cast<double>(shunt_voltage) * current_quanta));
-  int millivolts = static_cast<int>(bus_voltage * voltage_quanta);
-  // printf("Millivolts: %f\n", bus_voltage * voltage_quanta);
-
-  PowerData sample;
-  sample.current = milliamps / 1000.0;
-  sample.voltage = millivolts / 1000.0;
-  sample.power = sample.voltage * sample.current;
-  sample.timestamp = QDateTime::currentMSecsSinceEpoch();
-
-  emit dataReceived(sample);
 }
 void SerialManager::onSerialError(QSerialPort::SerialPortError error) {
   if (error != QSerialPort::NoError) {

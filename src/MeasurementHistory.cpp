@@ -124,6 +124,32 @@ const PowerData& MeasurementHistory::atByAge(std::size_t ageFromNewest) const {
     return _values[idx];
 }
 
+double MeasurementHistory::getCurrentStdDev() const noexcept {
+    return getCurrentStdDevLastN(_valid_count);
+}
+
+double MeasurementHistory::getCurrentStdDevLastN(std::size_t lastN) const noexcept {
+    if (_valid_count < 2 || lastN < 2) return 0.0;
+    lastN = std::min(lastN, _valid_count);
+
+    double sum = 0.0;
+    std::size_t idx = newestIndex();
+    for (std::size_t i = 0; i < lastN; ++i) {
+        sum += _values[idx].current;
+        idx = dec(idx);
+    }
+    double mean = sum / lastN;
+
+    double sq_sum = 0.0;
+    idx = newestIndex();
+    for (std::size_t i = 0; i < lastN; ++i) {
+        double diff = _values[idx].current - mean;
+        sq_sum += diff * diff;
+        idx = dec(idx);
+    }
+    return std::sqrt(sq_sum / lastN);
+}
+
 // Private helper methods
 std::size_t MeasurementHistory::inc(std::size_t idx) const noexcept {
     return (idx + 1) % _size;

@@ -8,10 +8,12 @@
 #include "OsdSettings.h"
 #include "PowerMonitor.h"
 #include "SettingsDialog.h"
+#include "AudioGenerator.h"
 #include <QMainWindow>
 #include <QMenu>
 #include <QSystemTrayIcon>
 #include <QTimer>
+#include <QAudioSink>
 
 QT_BEGIN_NAMESPACE
 class QLabel;
@@ -71,6 +73,8 @@ private slots:
 
     void showAboutDialog();
 
+    void toggleAudio();
+
 protected:
     void resizeEvent(QResizeEvent *event) override;
 
@@ -107,6 +111,9 @@ private:
     CurrentGraph *m_currentGraph;
     QTimer *m_reconnect_timer;
     PowerData lastDataRaw;
+
+    QAudioSink *m_audioSink = nullptr;
+    AudioGenerator *m_audioGenerator = nullptr;
 };
 
 #endif // MAINWINDOW_H
