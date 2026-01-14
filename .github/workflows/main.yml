@@ -51,7 +51,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.9.2'
-          modules: 'qtserialport qtconnectivity'
+          modules: 'qtserialport qtconnectivity qtmultimedia'
           setup-python: 'false'
           cache: true
 
@@ -62,7 +62,7 @@ jobs:
           version: '6.9.2'
           host: 'windows'
           arch: 'win64_msvc2022_64'
-          modules: 'qtserialport qtconnectivity'
+          modules: 'qtserialport qtconnectivity qtmultimedia'
           cache: true
 
       - name: Install Qt (macOS)
@@ -70,7 +70,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.9.2'
-          modules: 'qtserialport qtconnectivity'
+          modules: 'qtserialport qtconnectivity qtmultimedia'
           setup-python: 'false'
           cache: true
 
@@ -95,10 +95,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux
+          - name: Linux-Ubuntu
             runs-on: ubuntu-24.04
             generator: "Unix Makefiles"
             build_type: Release
+            distro: ubuntu-24.04
+          - name: Linux-Debian
+            runs-on: ubuntu-latest
+            container: debian:bookworm
+            generator: "Unix Makefiles"
+            build_type: Release
+            distro: debian-12
           - name: macOS
             runs-on: macos-latest
             generator: "Unix Makefiles"
@@ -145,7 +152,7 @@ jobs:
         with:
           version: '6.9.2'
           target: 'desktop'
-          modules: 'qtserialport qtconnectivity'
+          modules: 'qtserialport qtconnectivity qtmultimedia'
           setup-python: 'false'
           cache: true
 
@@ -157,16 +164,17 @@ jobs:
           host: 'windows'
           target: 'desktop'
           arch: 'win64_msvc2022_64'
-          modules: 'qtserialport qtconnectivity'
+          modules: 'qtserialport qtconnectivity qtmultimedia'
           cache: true
 
       - name: Install additional Linux dependencies
-        if: matrix.name == 'Linux'
+        if: startsWith(matrix.name, 'Linux')
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0 rpm
+          if [ -f /usr/bin/sudo ]; then SUDO=sudo; else SUDO=; fi
+          $SUDO apt-get update
+          $SUDO apt-get install -y build-essential cmake git libgl1-mesa-dev libxkbcommon-x11-0 rpm
           # Install system Qt6 instead of using qt-installer
-          sudo apt-get install -y qt6-base-dev qt6-serialport-dev qt6-connectivity-dev libqt6core6 libqt6gui6 libqt6widgets6
+          $SUDO apt-get install -y qt6-base-dev qt6-serialport-dev qt6-connectivity-dev qt6-multimedia-dev
 
       - name: Import Code-Signing Certificates
         if: matrix.name == 'macOS'
@@ -193,7 +201,8 @@ jobs:
           -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
           -DCMAKE_PREFIX_PATH=${{env.Qt6_DIR}}
           -DPROJECT_VERSION_OVERRIDE="${{ steps.get_version.outputs.version }}"
-          ${{ matrix.name == 'macos-latest' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
+          -DLINUX_DISTRO="${{ matrix.distro }}"
+          ${{ matrix.name == 'macOS' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
@@ -212,7 +221,7 @@ jobs:
 
       # Linux deployment - bundle Qt libraries
       - name: Deploy Qt libraries (Linux)
-        if: matrix.name == 'Linux'
+        if: startsWith(matrix.name, 'Linux')
         run: |
           # Create deployment directory
           mkdir -p ${{github.workspace}}/deploy/linux
@@ -249,28 +258,28 @@ jobs:
           
           # Create a simple tar.gz archive
           cd ${{github.workspace}}/deploy
-          tar -czf ../USB-Power-OSD-Linux.tar.gz linux/
+          tar -czf ../USB-Power-OSD-Linux-${{ matrix.distro }}.tar.gz linux/
 
       - name: Create DEB and RPM packages (Linux)
-        if: matrix.name == 'Linux'
+        if: startsWith(matrix.name, 'Linux')
         run: |
           cd ${{github.workspace}}/build
           cpack -G DEB
           cpack -G RPM
 
       - name: Upload DEB package
-        if: matrix.name == 'Linux'
+        if: startsWith(matrix.name, 'Linux')
         uses: actions/upload-artifact@v4
         with:
-          name: linux-deb
+          name: linux-deb-${{ matrix.distro }}
           path: ${{github.workspace}}/build/*.deb
           if-no-files-found: error
 
       - name: Upload RPM package
-        if: matrix.name == 'Linux'
+        if: startsWith(matrix.name, 'Linux')
         uses: actions/upload-artifact@v4
         with:
-          name: linux-rpm
+          name: linux-rpm-${{ matrix.distro }}
           path: ${{github.workspace}}/build/*.rpm
           if-no-files-found: error
 
@@ -338,11 +347,11 @@ jobs:
           path: "${{ steps.find_msi.outputs.MSI_PATH }}"
 
       - name: Upload Linux artifacts
-        if: matrix.name == 'Linux'
+        if: startsWith(matrix.name, 'Linux')
         uses: actions/upload-artifact@v4
         with:
-          name: linux-build
-          path: ${{github.workspace}}/USB-Power-OSD-Linux.tar.gz
+          name: linux-build-${{ matrix.distro }}
+          path: ${{github.workspace}}/USB-Power-OSD-Linux-${{ matrix.distro }}.tar.gz
           if-no-files-found: error
 
       - name: Deploy Qt libraries (macOS)
@@ -441,37 +450,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download Linux Artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: linux-build
-          path: artifacts/linux
-
-      - name: Download DEB Package
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-deb
-          path: artifacts/linux-deb
-
-      - name: Download RPM Package
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-rpm
-          path: artifacts/linux-rpm
-
-      # Download macOS artifacts
-      - name: Download macOS Application Image Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: macOS Application Image
-          path: artifacts/macos
-
-      # Download Windows MSI
-      - name: Download AppInstaller Artifact (MSI)
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-msi
-          path: artifacts/windows-msi
+          path: artifacts
 
       # Set up Node.js for Semantic Release
       - name: Set Up Node.js
