@@ -82,9 +82,9 @@ void BluetoothManager::startScanning()
     }
 
     m_isActive = true;
-    qDebug() << "Starting Bluetooth scan (LowEnergyMethod)...";
-    m_discoveryAgent->setLowEnergyDiscoveryTimeout(5000);
-    m_discoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
+    qDebug() << "Starting Bluetooth scan (All methods)...";
+    m_discoveryAgent->setLowEnergyDiscoveryTimeout(10000);
+    m_discoveryAgent->start();
     
     if (!m_scanTimer->isActive()) {
         m_scanTimer->start();
@@ -119,16 +119,24 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
     // Look for devices with "USB Power" or your specific device name
     QString deviceName = info.name();
     QList<QBluetoothUuid> serviceUuids = info.serviceUuids();
+
+    qDebug() << "Found device:" << (deviceName.isEmpty() ? "<no name>" : deviceName)
+             << "[" << info.address().toString() << "]"
+             << "RSSI:" << info.rssi();
     
     // Check if it matches our target name
     bool isTarget = deviceName.contains("MacWake-USBPowerMeter", Qt::CaseInsensitive) ||
                     deviceName.contains("USB Power", Qt::CaseInsensitive) ||
-                    deviceName.contains("Power Meter", Qt::CaseInsensitive);
+                    deviceName.contains("Power Meter", Qt::CaseInsensitive) ||
+                    deviceName.contains("USB-Power", Qt::CaseInsensitive) ||
+                    deviceName.contains("USBPower", Qt::CaseInsensitive);
     
     // Also check if it advertises our target service UUID
     if (!isTarget) {
         for (const auto& uuid : serviceUuids) {
-            if (uuid.toString(QUuid::WithBraces).compare(SERVICE_UUID, Qt::CaseInsensitive) == 0) {
+            QString uuidStr = uuid.toString(QUuid::WithBraces);
+            if (uuidStr.compare(SERVICE_UUID, Qt::CaseInsensitive) == 0 ||
+                uuid.toString(QUuid::WithoutBraces).compare(SERVICE_UUID.mid(1, SERVICE_UUID.length() - 2), Qt::CaseInsensitive) == 0) {
                 isTarget = true;
                 break;
             }
@@ -203,7 +211,8 @@ void BluetoothManager::onControllerDisconnected()
 void BluetoothManager::onServiceDiscovered(const QBluetoothUuid &uuid)
 {
     qDebug() << "Service discovered:" << uuid.toString();
-    if (uuid.toString(QUuid::WithBraces) == SERVICE_UUID) {
+    QString uuidWithBraces = uuid.toString(QUuid::WithBraces);
+    if (uuidWithBraces.compare(SERVICE_UUID, Qt::CaseInsensitive) == 0) {
         qDebug() << "Found target service";
     }
 }
@@ -215,6 +224,15 @@ void BluetoothManager::onServiceDiscoveryFinished()
     QBluetoothUuid serviceUuid(SERVICE_UUID);
     m_service = m_controller->createServiceObject(serviceUuid, this);
     
+    if (!m_service) {
+        // Try without braces if first attempt failed
+        QString cleanUuid = SERVICE_UUID;
+        if (cleanUuid.startsWith('{') && cleanUuid.endsWith('}')) {
+            cleanUuid = cleanUuid.mid(1, cleanUuid.length() - 2);
+        }
+        m_service = m_controller->createServiceObject(QBluetoothUuid(cleanUuid), this);
+    }
+
     if (!m_service) {
         qDebug() << "Target service not found";
         return;

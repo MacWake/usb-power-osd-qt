@@ -45,6 +45,10 @@ public:
     // Optional: single sample access by age (0 = newest, size()-1 = oldest)
     [[nodiscard]] const PowerData& atByAge(std::size_t ageFromNewest) const;
 
+    // Statistics
+    [[nodiscard]] double getCurrentStdDev() const noexcept;
+    [[nodiscard]] double getCurrentStdDevLastN(std::size_t lastN) const noexcept;
+
   private:
     // Circular buffer helpers
     [[nodiscard]] std::size_t inc(std::size_t idx) const noexcept;

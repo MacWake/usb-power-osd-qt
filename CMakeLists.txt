@@ -34,6 +34,7 @@ find_package(Qt6 REQUIRED COMPONENTS
         Widgets
         Bluetooth
         SerialPort
+        Multimedia
 )
 
 # Enable automoc for Qt
@@ -74,6 +75,7 @@ set(HEADERS
         src/PowerMonitor.h
         src/SerialManager.h
         src/SettingsDialog.h
+        src/AudioGenerator.h
 )
 
 set(RESOURCES
@@ -88,6 +90,7 @@ target_link_libraries(usb-power-osd PRIVATE
         Qt6::Bluetooth
         Qt6::SerialPort
         Qt6::Network
+        Qt6::Multimedia
 )
 
 target_include_directories(usb-power-osd PRIVATE src)
@@ -222,9 +225,16 @@ elseif(UNIX AND NOT APPLE)
     set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${CPACK_PACKAGE_HOMEPAGE_URL}")
     
     # DEB dependencies for Ubuntu/Debian
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS 
-        "libqt6core6t64, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libgl1-mesa-glx | libgl1, libxkbcommon-x11-0"
-    )
+    if(LINUX_DISTRO STREQUAL "ubuntu-24.04")
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS 
+            "libqt6core6t64, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libqt6multimedia6, libgl1-mesa-glx | libgl1, libxkbcommon-x11-0"
+        )
+    else()
+        # Default/Debian stable dependencies
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS 
+            "libqt6core6, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libqt6multimedia6, libgl1-mesa-glx | libgl1, libxkbcommon-x11-0"
+        )
+    endif()
     
     # Enable automatic dependency detection as fallback
     set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
@@ -238,15 +248,20 @@ elseif(UNIX AND NOT APPLE)
     
     # RPM dependencies for Fedora/RHEL/openSUSE
     set(CPACK_RPM_PACKAGE_REQUIRES
-        "qt6-qtbase, qt6-qtserialport, qt6-qtconnectivity, mesa-libGL"
+        "qt6-qtbase, qt6-qtserialport, qt6-qtconnectivity, qt6-qtmultimedia, mesa-libGL"
     )
     
     # Enable automatic dependency detection
     set(CPACK_RPM_PACKAGE_AUTOREQ ON)
     
     # Package file names
-    set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")  # usb-power-osd_2.0.0_amd64.deb
-    set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")     # usb-power-osd-2.0.0.x86_64.rpm
+    if(LINUX_DISTRO)
+        set(CPACK_DEBIAN_FILE_NAME "usb-power-osd_${PROJECT_VERSION}_${LINUX_DISTRO}_amd64.deb")
+        set(CPACK_RPM_FILE_NAME "usb-power-osd-${PROJECT_VERSION}-${LINUX_DISTRO}.x86_64.rpm")
+    else()
+        set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")  # usb-power-osd_2.0.0_amd64.deb
+        set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")     # usb-power-osd-2.0.0.x86_64.rpm
+    endif()
     
 endif()
 

@@ -21,6 +21,7 @@ void OsdSettings::init() {
     // Default settings
     always_on_top = false;
     is_energy_displayed = false;
+    is_audio_enabled = false;
     window_height = 300;
     window_width = 400;
     min_current = 0;
@@ -88,6 +89,7 @@ QColor OsdSettings::voltsRgb(PowerDelivery::PD_VOLTS volts) const {
 void OsdSettings::saveSettings() {
     setValue("view/always_on_top", this->always_on_top);
     setValue("view/is_energy_displayed", this->is_energy_displayed);
+    setValue("view/is_audio_enabled", this->is_audio_enabled);
     setValue("window/height", this->window_height);
     setValue("window/width", this->window_width);
     setValue("measurement/primary_font_name", this->primary_font_name);
@@ -124,6 +126,8 @@ void OsdSettings::loadSettings() {
             value("view/always_on_top", this->always_on_top).toBool();
     this->is_energy_displayed =
             value("view/is_energy_displayed", this->is_energy_displayed).toBool();
+    this->is_audio_enabled =
+            value("view/is_audio_enabled", this->is_audio_enabled).toBool();
     this->window_height = value("window/height", this->window_height).toInt();
     this->window_width = value("window/width", this->window_width).toInt();
     this->primary_font_name =
