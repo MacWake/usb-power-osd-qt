@@ -24,6 +24,8 @@ void OsdSettings::init() {
     is_audio_enabled = false;
     window_height = 300;
     window_width = 400;
+    window_top = 0;
+    window_left = 0;
     min_current = 0;
     current_diff_ma = 0;
     primary_font_size = static_cast<int>(static_cast<double>(24) * scale);
@@ -92,6 +94,8 @@ void OsdSettings::saveSettings() {
     setValue("view/is_audio_enabled", this->is_audio_enabled);
     setValue("window/height", this->window_height);
     setValue("window/width", this->window_width);
+    setValue("window/top", this->window_top);
+    setValue("window/left", this->window_left);
     setValue("measurement/primary_font_name", this->primary_font_name);
     setValue("measurement/primary_font_size", this->primary_font_size);
     setValue("measurement/secondary_font_name", this->secondary_font_name);
@@ -130,6 +134,8 @@ void OsdSettings::loadSettings() {
             value("view/is_audio_enabled", this->is_audio_enabled).toBool();
     this->window_height = value("window/height", this->window_height).toInt();
     this->window_width = value("window/width", this->window_width).toInt();
+    this->window_top = value("window/top", this->window_top).toInt();
+    this->window_left = value("window/left", this->window_left).toInt();
     this->primary_font_name =
             value("measurement/primary_font_name", this->primary_font_name)
             .toString();
