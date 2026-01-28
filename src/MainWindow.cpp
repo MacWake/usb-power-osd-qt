@@ -329,6 +329,13 @@ void MainWindow::resizeEvent(QResizeEvent *event) {
     this->settings->saveSettings();
 }
 
+void MainWindow::moveEvent(QMoveEvent *event) {
+    QMainWindow::moveEvent(event);
+    this->settings->window_left = this->pos().x();
+    this->settings->window_top = this->pos().y();
+    this->settings->saveSettings();
+}
+
 void MainWindow::onPowerDataReceived(const PowerData &data) {
     this->lastDataRaw = data;
     static bool lastWasInvalid = false;
@@ -404,13 +411,13 @@ void MainWindow::updateLabels() {
         maxCurrent = this->lastDataRaw.current;
         maxPower = maxCurrent * maxVoltage;
     }
-        lblVoltage->setText(QString("%1V").arg(maxVoltage, 0, 'f', 2));
-        lblCurrent->setText(QString("%1A").arg(maxCurrent, 0, 'f', 4));
-        lblPower->setText(QString("%1W").arg(maxPower, 0, 'f', 3));
-        lblEnergy->setText(QString("%1Wh").arg(last.energy, 0, 'f', 3));
-        lblMinMaxCurrent->setText(QString("%1-%2A")
-            .arg(totalMinCurrent, 0, 'f', 3)
-            .arg(totalMaxCurrent, 0, 'f', 3));
+    lblVoltage->setText(QString("%1V").arg(maxVoltage, 0, 'f', 2));
+    lblCurrent->setText(QString("%1A").arg(maxCurrent, 0, 'f', 4));
+    lblPower->setText(QString("%1W").arg(maxPower, 0, 'f', 3));
+    lblEnergy->setText(QString("%1Wh").arg(last.energy, 0, 'f', 3));
+    lblMinMaxCurrent->setText(QString("%1-%2A")
+        .arg(totalMinCurrent, 0, 'f', 3)
+        .arg(totalMaxCurrent, 0, 'f', 3));
 }
 
 void MainWindow::updateUINoData() {
