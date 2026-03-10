@@ -5,6 +5,7 @@
 
 #include <QDebug>
 #include <QThread>
+#include <QElapsedTimer>
 #include <iostream>
 #include <ostream>
 
