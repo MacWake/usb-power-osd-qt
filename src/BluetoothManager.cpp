@@ -25,6 +25,7 @@ BluetoothManager::BluetoothManager(QObject *parent)
     , m_controller(nullptr)
     , m_service(nullptr)
     , m_scanTimer(new QTimer(this))
+    , m_connectTimer(new QTimer(this))
 {
     this->m_isActive = false;
     connect(m_discoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
@@ -39,9 +40,21 @@ BluetoothManager::BluetoothManager(QObject *parent)
     // Rescan periodically
     m_scanTimer->setInterval(10000); // 10 seconds
     connect(m_scanTimer, &QTimer::timeout, [this] {
-        if (!m_isConnected && !m_discoveryAgent->isActive()) {
+        if (!m_isConnected && !m_isConnecting && !m_discoveryAgent->isActive()) {
             startScanning();
         }
+    });
+
+    // Connection timeout: if connecting takes too long, abort and rescan
+    m_connectTimer->setSingleShot(true);
+    m_connectTimer->setInterval(15000); // 15 seconds
+    connect(m_connectTimer, &QTimer::timeout, [this] {
+        qDebug() << "BLE connection timed out, aborting";
+        m_isConnecting = false;
+        cleanupController();
+        emit deviceDisconnected();
+        // Delay rescan so BlueZ can finish processing the disconnect/cancel
+        QTimer::singleShot(3000, this, &BluetoothManager::startScanning);
     });
 
     // Log local adapter info
@@ -126,8 +139,10 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
     
     // Check if it matches our target name
     bool isTarget = deviceName.contains("MacWake-USBPowerMeter", Qt::CaseInsensitive) ||
+                    deviceName.contains("MacWake PowerMeter", Qt::CaseInsensitive) ||
                     deviceName.contains("USB Power", Qt::CaseInsensitive) ||
                     deviceName.contains("Power Meter", Qt::CaseInsensitive) ||
+                    deviceName.contains("PowerMeter", Qt::CaseInsensitive) ||
                     deviceName.contains("USB-Power", Qt::CaseInsensitive) ||
                     deviceName.contains("USBPower", Qt::CaseInsensitive);
     
@@ -148,7 +163,11 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
             qDebug() << "Ignoring found target device - not active";
             return;
         }
-        qDebug() << "Target device identified:" << (deviceName.isEmpty() ? "<no name>" : deviceName) 
+        if (m_isConnecting || m_isConnected) {
+            qDebug() << "Ignoring found target device - already connecting/connected";
+            return;
+        }
+        qDebug() << "Target device identified:" << (deviceName.isEmpty() ? "<no name>" : deviceName)
                  << "[" << info.address().toString() << "]";
         m_targetDevice = info;
         m_discoveryAgent->stop();
@@ -159,20 +178,36 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 void BluetoothManager::onScanFinished()
 {
     qDebug() << "Bluetooth scan finished";
-    if (!m_isConnected && m_targetDevice.isValid()) {
+    if (!m_isConnected && !m_controller && m_targetDevice.isValid()) {
         qDebug() << "Connecting to target device " << m_targetDevice.name();
         connectToDevice(m_targetDevice);
     }
 }
 
+void BluetoothManager::cleanupController()
+{
+    m_connectTimer->stop();
+    m_isConnecting = false;
+    if (m_controller) {
+        m_controller->disconnect(this);
+        if (m_controller->state() != QLowEnergyController::UnconnectedState)
+            m_controller->disconnectFromDevice();
+        m_controller->deleteLater();
+        m_controller = nullptr;
+    }
+    if (m_service) {
+        m_service->disconnect(this);
+        m_service->deleteLater();
+        m_service = nullptr;
+    }
+}
+
 void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
 {
-    if (m_controller) {
-        m_controller->deleteLater();
-    }
-    
+    cleanupController();
+
     m_controller = QLowEnergyController::createCentral(device, this);
-    
+
     connect(m_controller, &QLowEnergyController::connected,
             this, &BluetoothManager::onControllerConnected);
     connect(m_controller, &QLowEnergyController::disconnected,
@@ -183,11 +218,35 @@ void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
             this, &BluetoothManager::onServiceDiscoveryFinished);
     connect(m_controller, &QLowEnergyController::errorOccurred,
             [this](QLowEnergyController::Error error) {
-        qDebug() << "BLE Controller error:" << error;
+        qDebug() << "BLE Controller error:" << error << "-" << m_controller->errorString();
+        
+        bool transientError = (error == QLowEnergyController::ConnectionError || 
+                               error == QLowEnergyController::UnknownError);
+        
+        if (m_isConnecting && transientError && m_retryCount < m_maxRetries) {
+            m_retryCount++;
+            int delay = 1000 * m_retryCount; // Exponential-ish backoff
+            qDebug() << "Attempting retry" << m_retryCount << "of" << m_maxRetries << "in" << delay << "ms";
+            
+            m_isConnecting = false;
+            m_connectTimer->stop();
+            
+            QTimer::singleShot(delay, [this]() {
+                if (m_targetDevice.isValid() && !m_isConnected) {
+                    connectToDevice(m_targetDevice);
+                }
+            });
+            return;
+        }
+
         m_isConnected = false;
+        m_retryCount = 0;
+        cleanupController();
         emit deviceDisconnected();
     });
     
+    m_isConnecting = true;
+    m_connectTimer->start();
     qDebug() << "Connecting to device:" << device.name();
     m_controller->connectToDevice();
 }
@@ -195,17 +254,25 @@ void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
 void BluetoothManager::onControllerConnected()
 {
     qDebug() << "BLE Controller connected";
+    m_connectTimer->stop();
+    m_isConnecting = false;
+    m_retryCount = 0;
     m_controller->discoverServices();
 }
 
 void BluetoothManager::onControllerDisconnected()
 {
-    qDebug() << "BLE Controller disconnected";
+    qDebug() << "BLE Controller disconnected. RSSI:" << m_targetDevice.rssi();
     m_isConnected = false;
+    m_retryCount = 0;
+    cleanupController();
     emit deviceDisconnected();
     
-    // Restart scanning
-    //QTimer::singleShot(2000, this, &BluetoothManager::startScanning);
+    // If it was an active connection that dropped, try to reconnect or scan
+    if (m_isActive) {
+        qDebug() << "Unexpected disconnect while active, starting scan to reconnect...";
+        QTimer::singleShot(2000, this, &BluetoothManager::startScanning);
+    }
 }
 
 void BluetoothManager::onServiceDiscovered(const QBluetoothUuid &uuid)

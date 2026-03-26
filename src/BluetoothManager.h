@@ -43,6 +43,7 @@ private slots:
 
 private:
     void connectToDevice(const QBluetoothDeviceInfo &device);
+    void cleanupController();
     void setupService();
     void parseJsonAndEmitPowerData(const QByteArray &data);
     static PowerData parseJsonToPowerData(const QJsonObject &json);
@@ -55,7 +56,11 @@ private:
     QLowEnergyCharacteristic m_dataCharacteristic;
     
     QTimer *m_scanTimer;
+    QTimer *m_connectTimer;
     bool m_isConnected = false;
+    bool m_isConnecting = false;
+    int m_retryCount = 0;
+    const int m_maxRetries = 3;
     
     // Energy accumulation for BLE data
     double m_energyAccumulator = 0.0;

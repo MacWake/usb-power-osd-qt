@@ -440,7 +440,10 @@ void MainWindow::updateUINoData() {
 void MainWindow::setBackgroundColor(const QColor &color) {
     // Only set background for the main window itself, not children
     setStyleSheet(
-        QString("MainWindow { background-color: %1; }").arg(color.name()));
+        QString("MainWindow { background-color: %1; }").arg(color.name()) +
+        QString("QStatusBar { color: %1; background-color: %2; }")
+            .arg(settings->color_text.name())
+            .arg(color.name()));
 }
 
 void MainWindow::resetMeasurementHistory() {
