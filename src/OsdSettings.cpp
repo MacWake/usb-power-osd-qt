@@ -22,12 +22,16 @@ void OsdSettings::init() {
     always_on_top = false;
     is_energy_displayed = false;
     is_audio_enabled = false;
+    graph_log_scale = false;
+    show_graph_peaks = false;
     window_height = 300;
     window_width = 400;
     window_top = 0;
     window_left = 0;
     min_current = 0;
     current_diff_ma = 0;
+    graph_pixels_per_second = 4.0;
+    label_sample_window = 3;
     primary_font_size = static_cast<int>(static_cast<double>(24) * scale);
     secondary_font_size = static_cast<int>(static_cast<double>(18) * scale);
 #if TARGET_OS_OSX
@@ -92,6 +96,8 @@ void OsdSettings::saveSettings() {
     setValue("view/always_on_top", this->always_on_top);
     setValue("view/is_energy_displayed", this->is_energy_displayed);
     setValue("view/is_audio_enabled", this->is_audio_enabled);
+    setValue("graph/log_scale", this->graph_log_scale);
+    setValue("graph/show_peaks", this->show_graph_peaks);
     setValue("window/height", this->window_height);
     setValue("window/width", this->window_width);
     setValue("window/top", this->window_top);
@@ -102,6 +108,8 @@ void OsdSettings::saveSettings() {
     setValue("measurement/secondary_font_size", this->secondary_font_size);
     setValue("measurement/min_current", this->min_current);
     setValue("measurement/current_diff", this->current_diff_ma);
+    setValue("graph/pixels_per_second", this->graph_pixels_per_second);
+    setValue("label/sample_window", this->label_sample_window);
     setValue("colors/background", this->color_bg);
     setValue("colors/amps", this->color_text);
     setValue("colors/5v", this->color_5v);
@@ -132,6 +140,10 @@ void OsdSettings::loadSettings() {
             value("view/is_energy_displayed", this->is_energy_displayed).toBool();
     this->is_audio_enabled =
             value("view/is_audio_enabled", this->is_audio_enabled).toBool();
+    this->graph_log_scale =
+            value("graph/log_scale", this->graph_log_scale).toBool();
+    this->show_graph_peaks =
+            value("graph/show_peaks", this->show_graph_peaks).toBool();
     this->window_height = value("window/height", this->window_height).toInt();
     this->window_width = value("window/width", this->window_width).toInt();
     this->window_top = value("window/top", this->window_top).toInt();
@@ -151,6 +163,10 @@ void OsdSettings::loadSettings() {
             value("measurement/min_current", this->min_current).toFloat();
     this->current_diff_ma =
             value("measurement/current_diff", this->current_diff_ma).toInt();
+    this->graph_pixels_per_second =
+            value("graph/pixels_per_second", this->graph_pixels_per_second).toDouble();
+    this->label_sample_window =
+            value("label/sample_window", this->label_sample_window).toInt();
 
     this->color_text = colorValue("colors/amps", this->color_text);
     this->color_5v = colorValue("colors/5v", this->color_5v);

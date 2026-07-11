@@ -18,6 +18,8 @@ public:
     bool always_on_top = false;
     bool is_energy_displayed = false;
     bool is_audio_enabled = false;
+    bool graph_log_scale = false;
+    bool show_graph_peaks = false;
     int window_top;
     int window_left;
     int window_height;
@@ -28,6 +30,8 @@ public:
     int secondary_font_size;
     float min_current = 0.0;
     int current_diff_ma = 0;
+    double graph_pixels_per_second = 4.0;
+    int label_sample_window = 3;
     QColor color_bg;
     QColor color_text;
     QColor color_none;
