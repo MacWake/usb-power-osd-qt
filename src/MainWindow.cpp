@@ -54,6 +54,11 @@ MainWindow::MainWindow(OsdSettings *settings,
     connect(m_statusBarHideTimer, &QTimer::timeout, this,
             &MainWindow::hideStatusBar);
 
+    m_pipeline->setMinCurrentThreshold(settings->min_current);
+    m_pipeline->setPausedThresholdMs(1000);
+    connect(m_pipeline, &MeasurementPipeline::pausedChanged, m_currentGraph,
+            &CurrentGraph::refresh);
+
     QTimer::singleShot(50, [this] { MainWindow::connectLastDevice(false); });
 
     this->m_reconnect_timer = new QTimer(this);
@@ -384,7 +389,10 @@ void MainWindow::onDeviceDisconnected() {
     updateUINoData();
 }
 
-void MainWindow::showSettings() { m_settingsdialog->show(); }
+void MainWindow::showSettings() {
+  m_settingsdialog->show();
+  m_pipeline->setMinCurrentThreshold(settings->min_current);
+}
 
 void MainWindow::updateLabels() {
     double maxVoltage;
