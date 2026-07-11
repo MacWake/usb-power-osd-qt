@@ -115,17 +115,6 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
   return false;
 }
 
-void SerialManager::disconnect() {
-  qDebug() << "Disconnecting from serial device";
-  try {
-    if (m_serialPort->isOpen()) {
-      m_serialPort->close();
-    }
-  } catch (QException &e) {
-    qDebug() << "Exception while disconnecting: " << e.what();
-  }
-  m_isConnected = false;
-}
 void SerialManager::onSerialDataReady() {
   if (!m_isConnected) {
     return;
@@ -186,6 +175,18 @@ void SerialManager::onSerialDataReady() {
 }
 void SerialManager::start() { /* no-op: serial is started via tryConnect */ }
 void SerialManager::stop() { disconnect(); }
+
+void SerialManager::disconnect() {
+  qDebug() << "Disconnecting from serial device";
+  try {
+    if (m_serialPort->isOpen()) {
+      m_serialPort->close();
+    }
+  } catch (QException &e) {
+    qDebug() << "Exception while disconnecting: " << e.what();
+  }
+  m_isConnected = false;
+}
 
 QString SerialManager::sourceName() const {
   return m_serialPort ? m_serialPort->portName() : QString{};

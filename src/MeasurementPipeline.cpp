@@ -12,9 +12,18 @@ MeasurementPipeline::MeasurementPipeline(QObject *parent)
   connect(m_frameTimer, &QTimer::timeout, this, &MeasurementPipeline::onFrameTimer);
   setFrameRate(DefaultFrameRate);
   m_frameTimer->start();
+}
 
-  // Default: one hour of 30 Hz frames gives 4K@1px/s (≈64 min visible) with review headroom.
-  setMaxHistoryDuration(DefaultHistorySeconds);
+qint64 MeasurementPipeline::frameIntervalMs() const {
+  return static_cast<qint64>(std::round(1000.0 / m_frameRate.load()));
+}
+
+qint64 MeasurementPipeline::bucketTimestampFor(qint64 sampleTimestampMs) const {
+  const qint64 interval = frameIntervalMs();
+  if (interval <= 0) {
+    return sampleTimestampMs;
+  }
+  return (sampleTimestampMs / interval) * interval;
 }
 
 void MeasurementPipeline::pushSample(const PowerData &sample) {
@@ -26,25 +35,70 @@ void MeasurementPipeline::pushSample(const PowerData &sample) {
     }
   }
 
-  {
-    std::lock_guard<std::mutex> lock(m_frameMutex);
-    if (!m_bucketHasData.exchange(true)) {
-      m_currentBucket.timestampMs = sample.timestamp;
-      m_currentBucket.voltage = sample.voltage;
-      m_currentBucket.current = sample.current;
-      m_currentBucket.power = sample.power;
-      m_currentBucket.energyWh = sample.energy;
-      m_currentBucket.sampleCount = 1;
-    } else {
-      m_currentBucket.timestampMs = sample.timestamp;
-      m_currentBucket.current = std::max(m_currentBucket.current, sample.current);
-      m_currentBucket.power = std::max(m_currentBucket.power, sample.power);
-      // Voltage and energy change slowly; keep latest.
-      m_currentBucket.voltage = sample.voltage;
-      m_currentBucket.energyWh = sample.energy;
-      ++m_currentBucket.sampleCount;
-    }
+  std::lock_guard<std::mutex> lock(m_frameMutex);
+
+  const qint64 wallNow = QDateTime::currentMSecsSinceEpoch();
+  const qint64 sampleTs = static_cast<qint64>(sample.timestamp);
+  const bool isValid = sample.current >=
+                         static_cast<double>(m_minCurrentThreshold.load()) &&
+                     sample.voltage >= 3.0;
+
+  if (isValid) {
+    m_lastValidCurrentMs = std::max(m_lastValidCurrentMs, sampleTs - m_pauseOffsetMs);
+    m_lastValidWallClockMs = wallNow;
   }
+
+  const qint64 threshold = m_pausedThresholdMs.load();
+  const bool shouldPause =
+      threshold > 0 && (wallNow - m_lastValidWallClockMs) > threshold;
+
+  if (shouldPause) {
+    m_isPaused = true;
+  } else if (isValid) {
+    m_isPaused = false;
+  }
+
+  // Compensate the stream time for the wall-clock pause duration so the graph
+  // does not show a gap when data resumes after a pause/disconnect.
+  if (m_isPaused) {
+    if (m_pauseStartMs == 0) {
+      m_pauseStartMs = wallNow;
+    }
+    return;
+  }
+
+  // We just resumed: add the elapsed pause time to the offset so the new
+  // sample appears immediately after the last pre-pause bucket.
+  if (m_pauseStartMs != 0) {
+    m_pauseOffsetMs += wallNow - m_pauseStartMs;
+    m_pauseStartMs = 0;
+  }
+
+  const qint64 streamTs = sampleTs - m_pauseOffsetMs;
+  const qint64 bucketTs = bucketTimestampFor(streamTs);
+  auto it = m_frameBuckets.find(bucketTs);
+  if (it == m_frameBuckets.end()) {
+    DisplayFrame frame;
+    frame.timestampMs = bucketTs;
+    frame.voltage = sample.voltage;
+    frame.current = isValid ? sample.current : 0.0;
+    frame.power = isValid ? sample.power : 0.0;
+    frame.energyWh = sample.energy;
+    frame.sampleCount = isValid ? 1 : 0;
+    m_frameBuckets[bucketTs] = frame;
+  } else {
+    if (isValid) {
+      it->second.current = std::max(it->second.current, sample.current);
+      it->second.power = std::max(it->second.power, sample.power);
+      ++it->second.sampleCount;
+    }
+    it->second.voltage = sample.voltage;
+    it->second.energyWh = sample.energy;
+  }
+
+  // If a BLE packet arrived late/out of order, also flush any intermediate
+  // buckets that are now older than this sample so the UI can see them.
+  flushBucketsUpTo(bucketTs);
 }
 
 void MeasurementPipeline::reset() {
@@ -54,57 +108,103 @@ void MeasurementPipeline::reset() {
   }
   {
     std::lock_guard<std::mutex> lock(m_frameMutex);
-    m_frames.clear();
-    m_bucketHasData = false;
-    m_currentBucket = DisplayFrame{};
+    m_frameBuckets.clear();
+    m_lastValidCurrentMs = 0;
+    m_lastValidWallClockMs = 0;
+    m_pauseOffsetMs = 0;
+    m_pauseStartMs = 0;
+    m_isPaused = false;
   }
 }
 
 DisplayFrame MeasurementPipeline::latestFrame() const {
   std::lock_guard<std::mutex> lock(m_frameMutex);
-  if (!m_frames.empty()) {
-    return m_frames.back();
+  if (m_frameBuckets.empty()) {
+    return DisplayFrame{};
   }
-  if (m_bucketHasData) {
-    return m_currentBucket;
+  // Return the newest bucket, even if it has not been "closed" yet.
+  return m_frameBuckets.rbegin()->second;
+}
+
+std::vector<DisplayFrame> MeasurementPipeline::buildFrameList() const {
+  if (m_frameBuckets.empty()) {
+    return {};
   }
-  return DisplayFrame{};
+
+  std::vector<DisplayFrame> out;
+  out.reserve(m_frameBuckets.size());
+
+  // Forward-fill gaps so slow sources produce a steady 30 fps stream.
+  DisplayFrame lastValid;
+  bool haveLastValid = false;
+  for (const auto &[ts, frame] : m_frameBuckets) {
+    if (frame.sampleCount > 0) {
+      out.push_back(frame);
+      lastValid = frame;
+      haveLastValid = true;
+    } else if (haveLastValid) {
+      DisplayFrame filled = lastValid;
+      filled.timestampMs = ts;
+      out.push_back(filled);
+    }
+  }
+  return out;
 }
 
 std::vector<DisplayFrame> MeasurementPipeline::framesForDuration(double seconds) const {
   if (seconds <= 0.0) {
     return {};
   }
-  const qint64 now = QDateTime::currentMSecsSinceEpoch();
-  const qint64 oldestMs = now - static_cast<qint64>(seconds * 1000.0);
-
   std::lock_guard<std::mutex> lock(m_frameMutex);
-  std::vector<DisplayFrame> out;
-  // Pre-allocate rough estimate.
-  out.reserve(m_frames.size());
-  for (auto it = m_frames.rbegin(); it != m_frames.rend(); ++it) {
-    if (it->timestampMs < oldestMs) {
+  auto frames = buildFrameList();
+  if (frames.empty()) {
+    return frames;
+  }
+  const qint64 newest = frames.back().timestampMs;
+  const qint64 oldest = newest - static_cast<qint64>(seconds * 1000.0);
+  std::vector<DisplayFrame> result;
+  for (auto it = frames.rbegin(); it != frames.rend(); ++it) {
+    if (it->timestampMs < oldest) {
       break;
     }
-    out.push_back(*it);
+    result.push_back(*it);
   }
-  std::reverse(out.begin(), out.end());
-  return out;
+  std::reverse(result.begin(), result.end());
+  return result;
+}
+
+std::vector<DisplayFrame> MeasurementPipeline::framesInRange(qint64 startMs,
+                                                              qint64 endMs) const {
+  if (startMs >= endMs) {
+    return {};
+  }
+  std::lock_guard<std::mutex> lock(m_frameMutex);
+  auto frames = buildFrameList();
+  if (frames.empty()) {
+    return frames;
+  }
+  std::vector<DisplayFrame> result;
+  for (auto it = frames.rbegin(); it != frames.rend(); ++it) {
+    if (it->timestampMs < startMs) {
+      break;
+    }
+    if (it->timestampMs <= endMs) {
+      result.push_back(*it);
+    }
+  }
+  std::reverse(result.begin(), result.end());
+  return result;
 }
 
 std::vector<DisplayFrame> MeasurementPipeline::lastNFrames(std::size_t n) const {
   std::lock_guard<std::mutex> lock(m_frameMutex);
-  std::vector<DisplayFrame> out;
-  if (n == 0 || m_frames.empty()) {
-    return out;
+  auto frames = buildFrameList();
+  if (n == 0 || frames.empty()) {
+    return {};
   }
-  const std::size_t count = std::min(n, m_frames.size());
-  out.reserve(count);
-  auto it = m_frames.end() - static_cast<std::deque<DisplayFrame>::difference_type>(count);
-  for (; it != m_frames.end(); ++it) {
-    out.push_back(*it);
-  }
-  return out;
+  const std::size_t count = std::min(n, frames.size());
+  return std::vector<DisplayFrame>(frames.end() - static_cast<std::vector<DisplayFrame>::difference_type>(count),
+                                    frames.end());
 }
 
 bool MeasurementPipeline::maxCurrentRawLastN(std::size_t n, double &maxCurrent) const {
@@ -169,39 +269,82 @@ void MeasurementPipeline::setFrameRate(int framesPerSecond) {
 
 void MeasurementPipeline::setMaxHistoryDuration(double seconds) {
   m_maxHistorySeconds.store(std::max(seconds, 1.0));
-  pruneFrames();
+  pruneBuckets();
+}
+
+void MeasurementPipeline::setMinCurrentThreshold(float minCurrent) {
+  m_minCurrentThreshold.store(minCurrent);
+}
+
+void MeasurementPipeline::setPausedThresholdMs(qint64 ms) {
+  m_pausedThresholdMs.store(std::max(qint64{0}, ms));
 }
 
 void MeasurementPipeline::onFrameTimer() {
   DisplayFrame frame;
+  bool haveFrame = false;
+  bool wasPaused;
   {
     std::lock_guard<std::mutex> lock(m_frameMutex);
-    flushBucket();
-    if (!m_frames.empty()) {
-      frame = m_frames.back();
+
+    wasPaused = m_isPaused;
+
+    // Determine newest data timestamp in stream time.
+    qint64 newestDataTs = 0;
+    for (auto it = m_frameBuckets.rbegin(); it != m_frameBuckets.rend(); ++it) {
+      if (it->second.sampleCount > 0) {
+        newestDataTs = it->first;
+        break;
+      }
     }
+
+    if (newestDataTs > 0) {
+      flushBucketsUpTo(newestDataTs);
+      frame = m_frameBuckets.rbegin()->second;
+      haveFrame = true;
+    }
+
+    pruneBuckets();
   }
-  if (frame.sampleCount > 0) {
+
+  if (wasPaused != m_isPaused) {
+    emit pausedChanged(m_isPaused);
+  }
+
+  if (haveFrame && frame.sampleCount > 0) {
     emit frameReady(frame);
   }
 }
 
-void MeasurementPipeline::flushBucket() {
-  if (m_bucketHasData.exchange(false)) {
-    m_frames.push_back(m_currentBucket);
-    m_currentBucket = DisplayFrame{};
-    pruneFrames();
+void MeasurementPipeline::flushBucketsUpTo(qint64 bucketTimestampMs) {
+  if (m_frameBuckets.empty()) {
+    return;
+  }
+
+  // Ensure there is a bucket entry for every timestamp between the oldest
+  // bucket and the given one. Empty entries will be forward-filled later.
+  const qint64 oldest = m_frameBuckets.begin()->first;
+  const qint64 interval = frameIntervalMs();
+  if (interval <= 0) {
+    return;
+  }
+  for (qint64 ts = oldest + interval; ts <= bucketTimestampMs; ts += interval) {
+    if (!m_frameBuckets.count(ts)) {
+      m_frameBuckets[ts] = DisplayFrame{};
+      m_frameBuckets[ts].timestampMs = ts;
+    }
   }
 }
 
-void MeasurementPipeline::pruneFrames() {
-  if (m_frames.empty()) return;
-
+void MeasurementPipeline::pruneBuckets() {
+  if (m_frameBuckets.empty()) {
+    return;
+  }
   const qint64 now = QDateTime::currentMSecsSinceEpoch();
-  const qint64 oldestAllowedMs =
-      now - static_cast<qint64>(m_maxHistorySeconds.load() * 1000.0);
-
-  while (!m_frames.empty() && m_frames.front().timestampMs < oldestAllowedMs) {
-    m_frames.pop_front();
+  const qint64 oldestAllowedTs =
+      bucketTimestampFor(now - static_cast<qint64>(m_maxHistorySeconds.load() * 1000.0));
+  auto it = m_frameBuckets.begin();
+  while (it != m_frameBuckets.end() && it->first < oldestAllowedTs) {
+    it = m_frameBuckets.erase(it);
   }
 }

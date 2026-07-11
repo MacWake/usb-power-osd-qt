@@ -45,9 +45,10 @@ private:
     double findLowBox(double min_current);
     double findHighBox(double max_current);
 
-    [[nodiscard]] std::vector<double> buildCurrentPixelMap(double newestTime,
-                                                           double oldestTime,
-                                                           const std::vector<DisplayFrame> &frames) const;
+    void buildPixelMaps(double newestTime, double oldestTime,
+                        const std::vector<DisplayFrame> &frames,
+                        std::vector<double> &currentAtPixel,
+                        std::vector<double> &voltageAtPixel) const;
     void drawGrid(QPainter &p, double minCurrent, double maxCurrent);
     void drawGraphLine(QPainter &p, const std::vector<double> &currentAtPixel,
                        const std::vector<double> &voltageAtPixel,
@@ -61,6 +62,7 @@ private:
 
     bool m_isLive = true;
     qint64 m_viewAnchorMs = 0; // right edge when not live
+    qint64 m_liveRightEdgeMs = 0; // right edge quantized to whole pixels
     static constexpr int PanKeyStepMs = 1000;
     static constexpr int PanWheelStepMs = 5000;
 };
