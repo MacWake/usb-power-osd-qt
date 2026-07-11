@@ -20,13 +20,15 @@ const QString BluetoothManager::SERVICE_UUID = "{01bc9d6f-5b93-41bc-b63f-da5011e
 const QString BluetoothManager::DATA_CHARACTERISTIC_UUID = "{307fc9ab-5438-4e03-83fa-b9fc3d6afde2}";
 
 BluetoothManager::BluetoothManager(QObject *parent)
-    : QObject(parent)
+    : PowerDataSource(parent)
     , m_discoveryAgent(new QBluetoothDeviceDiscoveryAgent(this))
     , m_controller(nullptr)
     , m_service(nullptr)
     , m_scanTimer(new QTimer(this))
     , m_connectTimer(new QTimer(this))
 {
+    connect(this, &BluetoothManager::powerDataReceived, this,
+            [this](const PowerData &data) { emit sampleReceived(data); });
     this->m_isActive = false;
     connect(m_discoveryAgent, &QBluetoothDeviceDiscoveryAgent::deviceDiscovered,
             this, &BluetoothManager::onDeviceDiscovered);
@@ -52,7 +54,7 @@ BluetoothManager::BluetoothManager(QObject *parent)
         qDebug() << "BLE connection timed out, aborting";
         m_isConnecting = false;
         cleanupController();
-        emit deviceDisconnected();
+        emit disconnected();
         // Delay rescan so BlueZ can finish processing the disconnect/cancel
         QTimer::singleShot(3000, this, &BluetoothManager::startScanning);
     });
@@ -124,7 +126,7 @@ void BluetoothManager::disconnect()
     }
     m_isConnected = false;
     m_isActive = false;
-    //emit deviceDisconnected();
+    //emit disconnected();
 }
 
 void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
@@ -242,13 +244,24 @@ void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
         m_isConnected = false;
         m_retryCount = 0;
         cleanupController();
-        emit deviceDisconnected();
+        emit disconnected();
     });
     
     m_isConnecting = true;
     m_connectTimer->start();
     qDebug() << "Connecting to device:" << device.name();
     m_controller->connectToDevice();
+}
+
+void BluetoothManager::start() { startScanning(); }
+void BluetoothManager::stop() { disconnect(); }
+
+QString BluetoothManager::sourceName() const {
+    return m_targetDevice.name();
+}
+
+bool BluetoothManager::isConnected() const {
+    return m_isConnected;
 }
 
 void BluetoothManager::onControllerConnected()
@@ -266,7 +279,7 @@ void BluetoothManager::onControllerDisconnected()
     m_isConnected = false;
     m_retryCount = 0;
     cleanupController();
-    emit deviceDisconnected();
+    emit disconnected();
     
     // If it was an active connection that dropped, try to reconnect or scan
     if (m_isActive) {
@@ -372,7 +385,7 @@ void BluetoothManager::setupService()
     }
     
     m_isConnected = true;
-    emit deviceConnected(m_targetDevice.name());
+    emit connected(m_targetDevice.name());
     
     qDebug() << "BLE service setup complete";
 }

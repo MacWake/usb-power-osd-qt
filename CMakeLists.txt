@@ -51,6 +51,7 @@ set(SOURCES
         src/Main.cpp
         src/MainWindow.cpp
         src/MeasurementHistory.cpp
+        src/MeasurementPipeline.cpp
         src/OsdSettings.cpp
         src/PowerDelivery.cpp
         src/PowerMonitor.cpp
@@ -69,10 +70,12 @@ set(HEADERS
         src/DeviceSelectionDialog.h
         src/MainWindow.h
         src/MeasurementHistory.h
+        src/MeasurementPipeline.h
         src/OsdSettings.h
         src/PowerData.h
         src/PowerDelivery.h
         src/PowerMonitor.h
+        src/PowerDataSource.h
         src/SerialManager.h
         src/SettingsDialog.h
         src/AudioGenerator.h

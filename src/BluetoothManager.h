@@ -1,34 +1,38 @@
 #ifndef BLUETOOTHMANAGER_H
 #define BLUETOOTHMANAGER_H
 
-#include <QObject>
+#include "PowerDataSource.h"
+#include "PowerMonitor.h"
+
 #include <QBluetoothDeviceDiscoveryAgent>
 #include <QBluetoothDeviceInfo>
 #include <QLowEnergyController>
 #include <QLowEnergyService>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include "PowerMonitor.h"
 
 QT_FORWARD_DECLARE_CLASS(QTimer)
 
-class BluetoothManager : public QObject
+class BluetoothManager : public PowerDataSource
 {
     Q_OBJECT
 
 public:
     explicit BluetoothManager(QObject *parent = nullptr);
     ~BluetoothManager() override;
-    
+
+    void start() override;
+    void stop() override;
+    [[nodiscard]] QString sourceName() const override;
+    [[nodiscard]] bool isConnected() const override;
+
     void startScanning();
     void stopScanning();
     void disconnect();
 
   signals:
-    void deviceConnected(const QString &deviceName);
-    void deviceDisconnected();
     void dataReceived(const QByteArray &data);           // Keep raw data signal
-    void powerDataReceived(const PowerData &powerData); // Add parsed data signal
+    void powerDataReceived(const PowerData &powerData); // Parsed data signal
 
 private slots:
     void onDeviceDiscovered(const QBluetoothDeviceInfo &info);

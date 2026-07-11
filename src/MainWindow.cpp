@@ -18,9 +18,10 @@ MainWindow::MainWindow(OsdSettings *settings,
       m_deviceManager(new DeviceManager(this)),
       m_settingsdialog(new SettingsDialog(settings, this)),
       m_history(new MeasurementHistory(1000)), // todo change hard coded value
+      m_pipeline(new MeasurementPipeline(this)),
       m_updateTimer(new QTimer(this)), m_statusBarHideTimer(new QTimer(this)),
       m_deviceSelectionDialog(nullptr) {
-    this->m_currentGraph = new CurrentGraph(this, m_history, settings);
+    this->m_currentGraph = new CurrentGraph(this, m_pipeline, settings);
     this->m_deviceManager->setSettings(settings);
     statusBar()->setVisible(false);
 
@@ -43,8 +44,12 @@ MainWindow::MainWindow(OsdSettings *settings,
             &MainWindow::onDeviceDisconnected);
 
     // Setup timers
-    m_updateTimer->setInterval(200);
-    connect(m_updateTimer, &QTimer::timeout, [this] { this->updateLabels(); });
+    m_updateTimer->setInterval(33); // 30 fps fixed render loop
+    m_updateTimer->setTimerType(Qt::PreciseTimer);
+    connect(m_updateTimer, &QTimer::timeout, [this] {
+        this->updateLabels();
+        this->m_currentGraph->refresh();
+    });
     m_statusBarHideTimer->setSingleShot(true); // Only fire once
     connect(m_statusBarHideTimer, &QTimer::timeout, this,
             &MainWindow::hideStatusBar);
@@ -252,8 +257,6 @@ void MainWindow::setupUI() {
     QAction *aboutAction = helpMenu->addAction(tr("&About"));
     connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutDialog);
 
-    //    auto *viewMenu = menuBar()->addMenu("&View");
-    //    viewMenu->addAction("Toggle &OSD", this, &MainWindow::toggleOSD);
     positionWidgets();
 }
 
@@ -338,46 +341,28 @@ void MainWindow::moveEvent(QMoveEvent *event) {
 
 void MainWindow::onPowerDataReceived(const PowerData &data) {
     this->lastDataRaw = data;
-    static bool lastWasInvalid = false;
     auto norm_data = this->normalize(data);
 
+    // Always feed the pipeline; invalid samples are also useful to show gaps.
+    this->m_pipeline->pushSample(norm_data);
+
+    // Keep the raw rolling window available for legacy label stats.
+    static bool lastWasInvalid = false;
     if (norm_data.current < settings->min_current || norm_data.voltage < 2.0) {
         if (!lastWasInvalid) {
             this->m_history->push(norm_data);
             lastWasInvalid = true;
         }
-        if (m_audioGenerator) {
-            m_audioGenerator->setAmplitude(0.0);
-        }
     } else {
         lastWasInvalid = false;
         this->m_history->push(norm_data);
-
-        if (settings->is_audio_enabled && m_audioGenerator) {
-            // Frequency: 400Hz to 4kHz depending on current (0 to say 5A)
-            // Use sqrt for higher sensitivity at low currents
-            double currentA = std::abs(norm_data.current);
-            double normalizedCurrent = std::min(currentA / 5.0, 1.0);
-            double freq = 400.0 + (4000.0 - 400.0) * std::sqrt(normalizedCurrent);
-            m_audioGenerator->setFrequency(freq);
-
-            // Amplitude: Compare stddev of last 10 against last 3
-            double stddev10 = m_history->getCurrentStdDevLastN(10);
-            double stddev3 = m_history->getCurrentStdDevLastN(3);
-
-            // If stddev3 is much higher than stddev10, it means it's noisier now.
-            // A common way to detect change/noise is the difference.
-            double diff = std::abs(stddev3 - stddev10);
-
-            // Assume diff of 50mA is "full" volume (0.1)
-            double amp = std::min(diff / 0.05, 1.0) * 0.1;
-            m_audioGenerator->setAmplitude(amp);
-        }
     }
 }
 
 void MainWindow::onDeviceConnected(const QString &deviceName) {
     showStatusMessage("Connected to " + deviceName);
+    m_pipeline->reset();
+    m_history->reset();
     m_updateTimer->start();
 }
 
@@ -395,29 +380,49 @@ void MainWindow::updateLabels() {
     double maxPower;
     double totalMinCurrent;
     double totalMaxCurrent;
-    if (this->m_history->is_empty()) {
+
+    const int labelWindow = std::clamp(settings->label_sample_window, 1, 10);
+
+    if (!m_pipeline->maxValuesRawLastN(labelWindow, maxVoltage, maxCurrent, maxPower)) {
         this->updateUINoData();
         return;
     }
-    auto last = this->m_history->atByAge(0);
-    // if (last.voltage < 1.0 || last.current < this->settings->min_current) {
-    //     this->updateUINoData();
-    //     return;
-    // }
-    this->m_history->minMaxCurrentLastN(this->m_history->size(), totalMinCurrent,
-                                        totalMaxCurrent);
-    if (!this->m_history->maxValuesLastN(3, maxVoltage, maxCurrent, maxPower)) {
-        maxVoltage = this->lastDataRaw.voltage;
-        maxCurrent = this->lastDataRaw.current;
-        maxPower = maxCurrent * maxVoltage;
+
+    DisplayFrame lastFrame = m_pipeline->latestFrame();
+
+    if (m_history->is_empty() ||
+        !m_history->minMaxCurrentLastN(m_history->size(), totalMinCurrent, totalMaxCurrent)) {
+        totalMinCurrent = 0.0;
+        totalMaxCurrent = 0.0;
     }
+
     lblVoltage->setText(QString("%1V").arg(maxVoltage, 0, 'f', 2));
     lblCurrent->setText(QString("%1A").arg(maxCurrent, 0, 'f', 4));
     lblPower->setText(QString("%1W").arg(maxPower, 0, 'f', 3));
-    lblEnergy->setText(QString("%1Wh").arg(last.energy, 0, 'f', 3));
+    lblEnergy->setText(QString("%1Wh").arg(lastFrame.energyWh, 0, 'f', 3));
     lblMinMaxCurrent->setText(QString("%1-%2A")
         .arg(totalMinCurrent, 0, 'f', 3)
         .arg(totalMaxCurrent, 0, 'f', 3));
+
+    // Audio is driven by the time-normalized 30 Hz frame path.
+    if (settings->is_audio_enabled && m_audioGenerator) {
+        double currentA = std::max(lastFrame.current, 0.0);
+        double normalizedCurrent = std::min(currentA / 5.0, 1.0);
+        double freq = 400.0 + (4000.0 - 400.0) * std::sqrt(normalizedCurrent);
+        m_audioGenerator->setFrequency(freq);
+
+        double stddev10 = m_pipeline->stdDevCurrentLastN(10);
+        double stddev3 = m_pipeline->stdDevCurrentLastN(3);
+        double diff = std::abs(stddev3 - stddev10);
+        double amp = std::min(diff / 0.05, 1.0) * 0.1;
+
+        // Silence audio when there is no real current.
+        if (currentA < settings->min_current || lastFrame.sampleCount == 0) {
+            amp = 0.0;
+        }
+        m_audioGenerator->setAmplitude(amp);
+    }
+
 }
 
 void MainWindow::updateUINoData() {
