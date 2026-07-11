@@ -2,11 +2,10 @@
 #define SERIALMANAGER_H
 
 #include "PowerData.h"
+#include "PowerDataSource.h"
 
-#include <QObject>
 #include <QSerialPort>
 #include <QSerialPortInfo>
-#include <QTimer>
 
 enum SerialProtocol {
     PLD20 = 1,
@@ -14,21 +13,21 @@ enum SerialProtocol {
     MWAKE1
 };
 
-class SerialManager : public QObject
+class SerialManager : public PowerDataSource
 {
     Q_OBJECT
 
 public:
     explicit SerialManager(QObject *parent = nullptr);
     ~SerialManager() override;
-    
+
+    void start() override;
+    void stop() override;
+    [[nodiscard]] QString sourceName() const override;
+    [[nodiscard]] bool isConnected() const override;
+
     Q_INVOKABLE bool connectSerialDevice(const QSerialPortInfo &portInfo);
     Q_INVOKABLE void disconnect();
-
-signals:
-    void deviceConnected(const QString &deviceName);
-    void deviceDisconnected();
-    void dataReceived(PowerData data);
 
 public slots:
     bool tryConnect(const QString &portName);

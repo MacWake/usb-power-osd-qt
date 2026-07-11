@@ -1,10 +1,12 @@
 #ifndef DEVICEMANAGER_H
 #define DEVICEMANAGER_H
 
-#include "BluetoothManager.h"
 #include "OsdSettings.h"
+#include "PowerData.h"
+#include "PowerDataSource.h"
 #include "PowerMonitor.h"
 #include "SerialManager.h"
+#include "BluetoothManager.h"
 #include <QObject>
 #include <QThread>
 
@@ -21,17 +23,18 @@ public:
   void setSettings(OsdSettings *settings) { m_settings = settings; }
   bool isBLEAutoConnect() const;
 
+  void setActiveSource(PowerDataSource *source);
+  [[nodiscard]] PowerDataSource *activeSource() const { return m_activeSource; }
+
 signals:
   void deviceConnected(const QString &deviceName);
   void deviceDisconnected();
-  void powerDataReceived(const PowerData &powerData); // Add this signal
+  void powerDataReceived(const PowerData &powerData);
 
 private slots:
-  void onBluetoothDeviceConnected(const QString &deviceName);
-  void onBluetoothDeviceDisconnected();
-  void onSerialDeviceConnected(const QString &deviceName);
-  void onSerialDeviceDisconnected();
-  void onSerialDataReceived(const PowerData &data);
+  void onSourceConnected(const QString &deviceName);
+  void onSourceDisconnected();
+  void onSampleReceived(const PowerData &data);
 
 private:
   BluetoothManager *m_bluetoothManager;
@@ -39,6 +42,8 @@ private:
   QThread *m_serialThread;
   PowerMonitor *m_powerMonitor;
   OsdSettings *m_settings = nullptr;
+
+  PowerDataSource *m_activeSource = nullptr;
 
   bool m_isBluetoothConnected = false;
   bool m_isSerialConnected = false;

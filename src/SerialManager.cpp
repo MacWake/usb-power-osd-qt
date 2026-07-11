@@ -44,7 +44,7 @@ static int16_t hex4_to_int16(const char *buf) {
 }
 
 SerialManager::SerialManager(QObject *parent)
-    : QObject(parent), m_serialPort(new QSerialPort(this)) {
+    : PowerDataSource(parent), m_serialPort(new QSerialPort(this)) {
   connect(m_serialPort, &QSerialPort::readyRead, this,
           &SerialManager::onSerialDataReady);
   connect(m_serialPort, &QSerialPort::errorOccurred, this,
@@ -81,13 +81,13 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
     if (m_serialPort->isReadable() && m_serialPort->isWritable()) {
       if (this->checkPLDProtocol()) {
         m_isConnected = true;
-        emit deviceConnected(portInfo.systemLocation());
+        emit connected(portInfo.systemLocation());
         qDebug() << "Connected to serial device type " << this->m_protocol << " at 115200:" << portInfo.systemLocation();
         return true;
       }
       if (this->checkMacwakeProtocol()) {
         m_isConnected = true;
-        emit deviceConnected(portInfo.systemLocation());
+        emit connected(portInfo.systemLocation());
         qDebug() << "Connected to Macwake device at 115200:" << portInfo.systemLocation();
         return true;
       }
@@ -103,7 +103,7 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
     if (m_serialPort->isReadable() && m_serialPort->isWritable()) {
       if (this->checkPLDProtocol()) {
         m_isConnected = true;
-        emit deviceConnected(portInfo.systemLocation());
+        emit connected(portInfo.systemLocation());
         qDebug() << "Connected to serial device type " << this->m_protocol << " at 9600:" << portInfo.systemLocation();
         return true;
       }
@@ -181,14 +181,25 @@ void SerialManager::onSerialDataReady() {
     sample.power = sample.voltage * sample.current;
     sample.timestamp = QDateTime::currentMSecsSinceEpoch();
 
-    emit dataReceived(sample);
+    emit sampleReceived(sample);
   }
 }
+void SerialManager::start() { /* no-op: serial is started via tryConnect */ }
+void SerialManager::stop() { disconnect(); }
+
+QString SerialManager::sourceName() const {
+  return m_serialPort ? m_serialPort->portName() : QString{};
+}
+
+bool SerialManager::isConnected() const {
+  return m_isConnected;
+}
+
 void SerialManager::onSerialError(QSerialPort::SerialPortError error) {
   if (error != QSerialPort::NoError) {
     qDebug() << "Serial port error:" << error;
     if (m_isConnected)
-      emit deviceDisconnected();
+      emit disconnected();
     m_isConnected = false;
   }
 }

@@ -5,6 +5,7 @@
 #include "DeviceManager.h"
 #include "DeviceSelectionDialog.h"
 #include "MeasurementHistory.h"
+#include "MeasurementPipeline.h"
 #include "OsdSettings.h"
 #include "PowerMonitor.h"
 #include "SettingsDialog.h"
@@ -94,6 +95,7 @@ private:
     SettingsDialog *m_settingsdialog;
     OsdSettings *settings = nullptr;
     MeasurementHistory *m_history = nullptr;
+    MeasurementPipeline *m_pipeline = nullptr;
     DeviceSelectionDialog *m_deviceSelectionDialog;
 
     QTimer *m_updateTimer;
