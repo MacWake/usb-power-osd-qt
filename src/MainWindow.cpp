@@ -253,6 +253,18 @@ void MainWindow::setupUI() {
     fileMenu->addSeparator();
     fileMenu->addAction("E&xit", this, &QWidget::close);
 
+    auto *viewMenu = menuBar()->addMenu(tr("&View"));
+    QAction *logScaleAction = viewMenu->addAction(tr("Logarithmic Graph Time"));
+    logScaleAction->setCheckable(true);
+    logScaleAction->setChecked(settings->graph_log_scale);
+    connect(logScaleAction, &QAction::toggled, this, &MainWindow::toggleGraphLogScale);
+
+    QAction *peaksAction = viewMenu->addAction(tr("Show Graph Peaks"));
+    peaksAction->setCheckable(true);
+    peaksAction->setChecked(settings->show_graph_peaks);
+    peaksAction->setShortcut(QKeySequence("p"));
+    connect(peaksAction, &QAction::toggled, this, &MainWindow::toggleGraphPeaks);
+
     auto *helpMenu = menuBar()->addMenu(tr("&Help"));
     QAction *aboutAction = helpMenu->addAction(tr("&About"));
     connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutDialog);
@@ -529,9 +541,40 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
     return QMainWindow::eventFilter(obj, event);
 }
 
+void MainWindow::keyPressEvent(QKeyEvent *event) {
+    // Forward cursor keys and Home to the graph for history navigation,
+    // unless a dialog or text field has focus.
+    switch (event->key()) {
+    case Qt::Key_Left:
+    case Qt::Key_Right:
+    case Qt::Key_Home:
+        m_currentGraph->setFocus();
+        m_currentGraph->handleKey(event);
+        if (event->isAccepted()) {
+            return;
+        }
+        break;
+    default:
+        break;
+    }
+    QMainWindow::keyPressEvent(event);
+}
+
 void MainWindow::showAboutDialog() {
     AboutDialog aboutDialog(this);
     aboutDialog.exec();
+}
+
+void MainWindow::toggleGraphLogScale() {
+    settings->graph_log_scale = !settings->graph_log_scale;
+    settings->saveSettings();
+    m_currentGraph->update();
+}
+
+void MainWindow::toggleGraphPeaks() {
+    settings->show_graph_peaks = !settings->show_graph_peaks;
+    settings->saveSettings();
+    m_currentGraph->update();
 }
 
 void MainWindow::toggleAudio() {

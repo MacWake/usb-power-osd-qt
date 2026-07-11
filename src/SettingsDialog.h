@@ -45,6 +45,10 @@ private:
   QCheckBox *m_notificationsCheck;
   MainWindow * m_mainwindow;
   QSpinBox * m_minCurrent;
+  QSpinBox * m_graphPixelsPerSecond;
+  QSpinBox * m_labelSampleWindow;
+  QCheckBox * m_graphLogScale;
+  QCheckBox * m_showGraphPeaks;
   QPushButton * m_BackgroundButton;
   QPushButton * m_TextButton;
   QPushButton * m_5VButton;

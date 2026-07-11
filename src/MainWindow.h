@@ -73,6 +73,8 @@ private slots:
     void showAboutDialog();
 
     void toggleAudio();
+    void toggleGraphLogScale();
+    void toggleGraphPeaks();
 
 protected:
     void resizeEvent(QResizeEvent *event) override;
@@ -80,6 +82,8 @@ protected:
     void moveEvent(QMoveEvent *event) override;
 
     bool eventFilter(QObject *obj, QEvent *event) override;
+
+    void keyPressEvent(QKeyEvent *event) override;
 
 private:
     void setupUI();
