@@ -115,6 +115,64 @@ bool SerialManager::connectSerialDevice(const QSerialPortInfo &portInfo) {
   return false;
 }
 
+bool SerialManager::detectPLDProtocol(const QByteArray &line,
+                                      SerialProtocol &protocol) {
+  if (line.length() == 9) {
+    if (line.at(8) == 28) {
+      protocol = SerialProtocol::PLD28;
+      return true;
+    }
+    if (line.at(8) == 20) {
+      protocol = SerialProtocol::PLD20;
+      return true;
+    }
+  } else if (line.length() == 8) {
+    protocol = SerialProtocol::PLD20;
+    return true;
+  }
+  return false;
+}
+
+bool SerialManager::parsePLDLine(const QByteArray &line,
+                                  SerialProtocol protocol, PowerData &out) {
+  double voltage_quanta;
+  double current_quanta;
+
+  if (protocol == SerialProtocol::PLD28) {
+    voltage_quanta = 3.125;
+    current_quanta = 0.2; // with 50mR shunt
+  } else if (protocol == SerialProtocol::PLD20) {
+    voltage_quanta = 4.0;
+    current_quanta = 0.06; // with 100mR shunt
+  } else {
+    return false;
+  }
+
+  if (line.size() < 8) {
+    return false;
+  }
+
+  const QByteArray data = line.left(8);
+  const int shunt_voltage =
+      hex4_to_int16(data.sliced(0, 4).toStdString().c_str());
+  double bus_voltage = static_cast<double>(
+      hex4_to_uint16(data.sliced(4, 4).toStdString().c_str()));
+
+  if (protocol == SerialProtocol::PLD20) {
+    bus_voltage /= 8.0;
+  }
+
+  const int milliamps =
+      qAbs(static_cast<int>(static_cast<double>(shunt_voltage) * current_quanta));
+  const int millivolts = static_cast<int>(bus_voltage * voltage_quanta);
+
+  out.current = milliamps / 1000.0;
+  out.voltage = millivolts / 1000.0;
+  out.power = out.voltage * out.current;
+  out.timestamp = QDateTime::currentMSecsSinceEpoch();
+  return true;
+}
+
 void SerialManager::onSerialDataReady() {
   if (!m_isConnected) {
     return;
@@ -127,48 +185,17 @@ void SerialManager::onSerialDataReady() {
     } else {
       continue;
     }
-    double voltage_quanta;
-    double current_quanta;
 
-    if (m_protocol == SerialProtocol::PLD28) {
-      voltage_quanta = 3.125;
-      current_quanta = 0.2; // with 50mR shunt
-    } else if (m_protocol == SerialProtocol::PLD20) {
-      voltage_quanta = 4.0;
-      current_quanta = 0.06; // with 100mR shunt
-    } else {
-      qDebug() << "Unhandled protocol " << m_protocol;
-      continue;
-    }
-    // printf("len=%d\n", static_cast<int>(strlen(serial_buffer)));
     if (line.size() < 8 || line.size() > 11) {
       qDebug() << "Bad packet length " << line.size();
       continue;
     }
-    int shunt_voltage = hex4_to_int16(line.sliced(0, 4).toStdString().c_str());
-    // printf("Shunt: %d\n", shunt_voltage);
-
-    auto bus_voltage = static_cast<double>(
-        hex4_to_uint16(line.sliced(4, 4).toStdString().c_str()));
-    // if (frame_type == OSD_MODE_20V && (bus_voltage & 0x0001)) {
-    //     std::cerr << "bad data?" << std::endl;
-    //     break;
-    // }
-
-    if (m_protocol == PLD20) {
-      bus_voltage /= 8.0;
-    }
-
-    int milliamps = abs(
-        static_cast<int>(static_cast<double>(shunt_voltage) * current_quanta));
-    int millivolts = static_cast<int>(bus_voltage * voltage_quanta);
-    // printf("Millivolts: %f\n", bus_voltage * voltage_quanta);
 
     PowerData sample;
-    sample.current = milliamps / 1000.0;
-    sample.voltage = millivolts / 1000.0;
-    sample.power = sample.voltage * sample.current;
-    sample.timestamp = QDateTime::currentMSecsSinceEpoch();
+    if (!parsePLDLine(line, m_protocol, sample)) {
+      qDebug() << "Unhandled protocol " << m_protocol;
+      continue;
+    }
 
     emit sampleReceived(sample);
   }
@@ -272,17 +299,9 @@ bool SerialManager::checkPLDProtocol() {
       line = line.trimmed();
     }
 
-    if (line.length() == 9) {
-      if (line.at(8) == 28) {
-        m_protocol = SerialProtocol::PLD28;
-        return true;
-      }
-      if (line.at(8) == 20) {
-          m_protocol = SerialProtocol::PLD20;
-          return true;
-      }
-    } else if (line.length() == 8) {
-      m_protocol = SerialProtocol::PLD20;
+    SerialProtocol detected;
+    if (detectPLDProtocol(line, detected)) {
+      m_protocol = detected;
       return true;
     }
 

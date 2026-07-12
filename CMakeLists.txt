@@ -35,12 +35,78 @@ find_package(Qt6 REQUIRED COMPONENTS
         Bluetooth
         SerialPort
         Multimedia
+        Test
 )
 
 # Enable automoc for Qt
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+
+# Optional LLVM/Clang coverage instrumentation for the test target.
+option(USBPOWEROSD_ENABLE_COVERAGE
+       "Build usb-power-osd-tests with LLVM coverage instrumentation (Clang/AppleClang only)" OFF)
+
+# Unit tests
+set(TEST_SOURCES
+        tests/main.cpp
+        tests/test_v2_ble_protocol.cpp
+        tests/test_v2_ble_protocol.h
+        tests/test_serial_pld_protocol.cpp
+        tests/test_serial_pld_protocol.h
+        tests/test_measurement_pipeline.cpp
+        tests/test_measurement_pipeline.h
+)
+
+set(TEST_LIB_SOURCES
+        src/BluetoothManager.cpp
+        src/BluetoothManager.h
+        src/MeasurementPipeline.cpp
+        src/MeasurementPipeline.h
+        src/PowerDelivery.cpp
+        src/PowerDelivery.h
+        src/PowerMonitor.cpp
+        src/PowerMonitor.h
+        src/SerialManager.cpp
+        src/SerialManager.h
+        src/PowerData.h
+        src/PowerDataSource.h
+)
+
+enable_testing()
+
+add_executable(usb-power-osd-tests ${TEST_SOURCES} ${TEST_LIB_SOURCES})
+target_link_libraries(usb-power-osd-tests PRIVATE
+        Qt6::Core
+        Qt6::Bluetooth
+        Qt6::SerialPort
+        Qt6::Test
+)
+target_include_directories(usb-power-osd-tests PRIVATE src)
+add_test(NAME usb-power-osd-tests COMMAND usb-power-osd-tests)
+
+if(USBPOWEROSD_ENABLE_COVERAGE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(usb-power-osd-tests PRIVATE
+                -fprofile-instr-generate
+                -fcoverage-mapping
+                -O0
+        )
+        target_link_options(usb-power-osd-tests PRIVATE
+                -fprofile-instr-generate
+        )
+        message(STATUS "LLVM coverage instrumentation enabled for usb-power-osd-tests")
+    else()
+        message(WARNING "USBPOWEROSD_ENABLE_COVERAGE is only supported with Clang/AppleClang; ignoring for ${CMAKE_CXX_COMPILER_ID}")
+    endif()
+endif()
+
+# Convenience target that runs the coverage report script.
+add_custom_target(coverage
+    COMMAND "${CMAKE_SOURCE_DIR}/scripts/generate_coverage.sh" "${CMAKE_BINARY_DIR}"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMENT "Generating HTML coverage report in ${CMAKE_BINARY_DIR}/coverage-html"
+)
 
 # Source files
 set(SOURCES

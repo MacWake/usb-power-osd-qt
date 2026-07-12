@@ -30,6 +30,14 @@ public:
     void stopScanning();
     void disconnect();
 
+    /**
+     * @brief Parse a V2-BLE JSON payload into a PowerData sample.
+     *
+     * Exposed as a public static helper so it can be unit-tested without
+     * instantiating a BluetoothManager or connecting to hardware.
+     */
+    static PowerData parseJsonToPowerData(const QJsonObject &json);
+
   signals:
     void dataReceived(const QByteArray &data);           // Keep raw data signal
     void powerDataReceived(const PowerData &powerData); // Parsed data signal
@@ -51,7 +59,6 @@ private:
     void cleanupControllerAsync();
     void setupService();
     void parseJsonAndEmitPowerData(const QByteArray &data);
-    static PowerData parseJsonToPowerData(const QJsonObject &json);
 
     QBluetoothDeviceDiscoveryAgent *m_discoveryAgent;
     QLowEnergyController *m_controller;

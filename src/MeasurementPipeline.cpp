@@ -2,6 +2,7 @@
 #include "MeasurementPipeline.h"
 
 #include <QDateTime>
+#include <QThread>
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -11,7 +12,12 @@ MeasurementPipeline::MeasurementPipeline(QObject *parent)
   m_frameTimer->setTimerType(Qt::PreciseTimer);
   connect(m_frameTimer, &QTimer::timeout, this, &MeasurementPipeline::onFrameTimer);
   setFrameRate(DefaultFrameRate);
-  m_frameTimer->start();
+  // Only start the frame timer if the current thread has a live event
+  // dispatcher. This avoids Qt warnings in unit tests that construct a
+  // pipeline without a running event loop.
+  if (QThread::currentThread() && QThread::currentThread()->eventDispatcher()) {
+    m_frameTimer->start();
+  }
 }
 
 qint64 MeasurementPipeline::frameIntervalMs() const {
