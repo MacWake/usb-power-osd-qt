@@ -38,7 +38,7 @@ double CurrentGraph::findLowBox(double min_current) {
 
 double CurrentGraph::findHighBox(double max_current) {
   if (max_current >= 1.0) {
-    return ceil(max_current);
+    return ceil(max_current*2)/2;
   }
   if (max_current >= .5) {
     return 1.0;
@@ -49,8 +49,11 @@ double CurrentGraph::findHighBox(double max_current) {
   if (max_current >= .1) {
     return .25;
   }
-  if (max_current >= .01) {
+  if (max_current >= .05) {
     return .1;
+  }
+  if (max_current >= .01) {
+    return .05;
   }
   return ceil(max_current);
 }
@@ -119,6 +122,41 @@ void CurrentGraph::refresh() {
   update(); // schedules a paintEvent
 }
 
+namespace {
+  // Maps a horizontal pixel index (0 = right/newest, w-1 = left/oldest) to a
+  // time offset in seconds from the right edge for the stepped "log-like" view.
+  // The newest 2/6 (1/3) uses linear resolution. The remaining 4/6 are divided
+  // into four segments, each with half the resolution of the one before it:
+  // 1x, 2x, 4x, 8x, 16x. So the leftmost segment has 16 measurements per pixel.
+  // Leftover pixels from integer division are added to the leftmost segment.
+  double steppedAgeForPixel(int i, int w, double pixelsPerSecond) {
+    const double unit = 1.0 / pixelsPerSecond; // seconds per pixel at full resolution
+    const int baseSegSize = w / 6;
+    const int leftover = w - 6 * baseSegSize;
+
+    const int segSizes[5] = {
+        2 * baseSegSize,
+        baseSegSize,
+        baseSegSize,
+        baseSegSize,
+        baseSegSize + leftover,
+    };
+    const double multipliers[5] = {1.0, 2.0, 4.0, 8.0, 16.0};
+
+    double age = 0.0;
+    int consumed = 0;
+    for (int seg = 0; seg < 5; ++seg) {
+      const int segEnd = consumed + segSizes[seg];
+      if (i <= segEnd) {
+        return age + (i - consumed) * multipliers[seg] * unit;
+      }
+      age += segSizes[seg] * multipliers[seg] * unit;
+      consumed = segEnd;
+    }
+    return age;
+  }
+}
+
 void CurrentGraph::buildPixelMaps(
     double newestTime, double oldestTime,
     const std::vector<DisplayFrame> &frames,
@@ -127,7 +165,6 @@ void CurrentGraph::buildPixelMaps(
   const int w = width();
   const double pixelsPerSecond =
       std::max(settings->graph_pixels_per_second, 0.1);
-  const double visibleDuration = static_cast<double>(w) / pixelsPerSecond;
 
   currentAtPixel.assign(w, 0.0);
   voltageAtPixel.assign(w, 0.0);
@@ -136,17 +173,12 @@ void CurrentGraph::buildPixelMaps(
   // Convention: currentAtPixel[idx], idx = 0 is the left/oldest edge,
   // idx = w-1 is the right/newest edge.
   if (settings->graph_log_scale) {
-    // Logarithmic mapping: high resolution near newest (right), compressed left.
-    // dt = t0 * (exp(k * x) - 1), where x is pixels from right edge.
-    const double t0 = 1.0 / static_cast<double>(pipeline->frameRate());
-    const double k =
-        std::log1p(visibleDuration / t0) / static_cast<double>(w > 1 ? w - 1 : 1);
-
+    // Stepped "log-like" mapping: newest third at full resolution, then
+    // resolution halves for each segment to the left. For every pixel column
+    // we compute the [tLeft, tRight) window and take the max current/voltage.
     for (int i = 0; i < w; ++i) {
-      const double dtRight = t0 * (std::exp(k * static_cast<double>(i)) - 1.0);
-      const double dtLeft =
-          (i == 0) ? 0.0
-                   : t0 * (std::exp(k * static_cast<double>(i - 1)) - 1.0);
+      const double dtLeft = steppedAgeForPixel(i, w, pixelsPerSecond);
+      const double dtRight = steppedAgeForPixel(i + 1, w, pixelsPerSecond);
       const qint64 tRight = static_cast<qint64>(newestTime - dtLeft * 1000.0);
       const qint64 tLeft = static_cast<qint64>(newestTime - dtRight * 1000.0);
 
@@ -224,7 +256,7 @@ void CurrentGraph::drawGrid(QPainter &p, double minCurrent,
   p.setFont(QFont("Arial", 8));
 
   for (float yy : {10.0, 9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0,
-                   0.5, 0.25, 0.1, 0.0}) {
+                   0.5, 0.25, 0.1, 0.05, 0.0}) {
     if (yy >= minCurrent && yy <= maxCurrent) {
       const int y = graphTop + static_cast<int>(
                                   (maxCurrent - yy) / (maxCurrent - minCurrent) *
@@ -312,14 +344,28 @@ void CurrentGraph::drawPeaks(QPainter &p,
     return;
   }
 
-  double peakMin = std::numeric_limits<double>::infinity();
-  double peakMax = -std::numeric_limits<double>::infinity();
-  for (double c : currentAtPixel) {
-    if (c < peakMin) peakMin = c;
-    if (c > peakMax) peakMax = c;
+  const int w = currentAtPixel.size();
+  if (w == 0) {
+    return;
   }
 
-  if (!std::isfinite(peakMin) || !std::isfinite(peakMax)) {
+  // Find min/max values and the first pixel where each occurs.
+  double peakMin = std::numeric_limits<double>::infinity();
+  double peakMax = -std::numeric_limits<double>::infinity();
+  int xMin = -1;
+  int xMax = -1;
+  for (int i = 0; i < w; ++i) {
+    if (currentAtPixel[i] < peakMin) {
+      peakMin = currentAtPixel[i];
+      xMin = i;
+    }
+    if (currentAtPixel[i] > peakMax) {
+      peakMax = currentAtPixel[i];
+      xMax = i;
+    }
+  }
+
+  if (xMin < 0 || xMax < 0 || !std::isfinite(peakMin) || !std::isfinite(peakMax)) {
     return;
   }
 
@@ -331,19 +377,33 @@ void CurrentGraph::drawPeaks(QPainter &p,
                           (maxCurrent - minCurrent) * graphHeight);
   };
 
-  QPen peakPen(Qt::cyan, 1, Qt::DashLine);
+  QPen peakPen(Qt::cyan, 1, Qt::SolidLine);
   p.setPen(peakPen);
+  p.setBrush(Qt::cyan);
   p.setFont(QFont("Arial", 9, QFont::Bold));
 
   const int yMax = yForCurrent(peakMax);
-  p.drawLine(1, yMax, width() - 1, yMax);
-  p.drawText(3, yMax - 2,
-             QString("▲ %1A").arg(peakMax, 0, 'f', 3));
-
   const int yMin = yForCurrent(peakMin);
-  p.drawLine(1, yMin, width() - 1, yMin);
-  p.drawText(3, yMin + 12,
-             QString("▼ %1A").arg(peakMin, 0, 'f', 3));
+
+  // Small triangles pointing at the extrema.
+  constexpr int triSize = 6;
+  QPointF maxTriangle[] = {
+      QPointF(xMax, yMax - triSize),
+      QPointF(xMax - triSize, yMax - triSize - triSize),
+      QPointF(xMax + triSize, yMax - triSize - triSize),
+  };
+  p.drawPolygon(maxTriangle, 3);
+  p.drawText(xMax + triSize + 2, yMax - triSize,
+             QString("%1A").arg(peakMax, 0, 'f', 3));
+
+  QPointF minTriangle[] = {
+      QPointF(xMin, yMin + triSize),
+      QPointF(xMin - triSize, yMin + triSize + triSize),
+      QPointF(xMin + triSize, yMin + triSize + triSize),
+  };
+  p.drawPolygon(minTriangle, 3);
+  p.drawText(xMin + triSize + 2, yMin + triSize + triSize,
+             QString("%1A").arg(peakMin, 0, 'f', 3));
 }
 
 void CurrentGraph::drawReviewBorder(QPainter &p) {
@@ -373,11 +433,14 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
 
   const int w = width();
   const double pixelsPerSecond = std::max(settings->graph_pixels_per_second, 0.1);
-  const double visibleSeconds = static_cast<double>(w) / pixelsPerSecond;
 
   if (!pipeline || pipeline->lastNFrames(1).empty()) {
     return;
   }
+
+  const double maxAgeSeconds = settings->graph_log_scale
+                                  ? steppedAgeForPixel(w, w, pixelsPerSecond)
+                                  : static_cast<double>(w) / pixelsPerSecond;
 
   const auto latestFrame = pipeline->latestFrame();
   const qint64 newestTime = latestFrame.timestampMs;
@@ -409,7 +472,7 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
   // right edge and the trace grows leftward; once it reaches the left edge it
   // scrolls. Review mode pans the fixed window.
   const qint64 viewLeftMs =
-      viewRightMs - static_cast<qint64>(visibleSeconds * 1000.0);
+      viewRightMs - static_cast<qint64>(maxAgeSeconds * 1000.0);
 
   // Query frames by the exact displayed time range, not by wall-clock now.
   std::vector<DisplayFrame> visibleFrames =
