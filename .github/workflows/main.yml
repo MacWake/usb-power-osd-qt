@@ -10,6 +10,16 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: 'Create a prerelease'
+        type: boolean
+        default: false
+        required: false
+      tag:
+        description: 'Tag name for the prerelease (e.g. v2.1.0-beta.1)'
+        type: string
+        required: false
 
 jobs:
   # Quick build job for PRs only
@@ -86,10 +96,12 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" ${{ matrix.name == 'macOS' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
           cmake --build build --config Release
 
-  # Full release build - runs on every push to main
+  # Full release build - runs on every push to main and on manual prerelease
   release-build:
     name: Release Build on ${{ matrix.name }}
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true')
     runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
@@ -462,7 +474,9 @@ jobs:
   release:
     name: Publish New Release
     needs: release-build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -479,8 +493,9 @@ jobs:
         with:
           path: artifacts
 
-      # Set up Node.js for Semantic Release
+      # Automatic release via semantic-release for pushes to main
       - name: Set Up Node.js
+        if: github.event_name == 'push'
         uses: actions/setup-node@v5
         with:
           node-version: '22'
@@ -488,6 +503,19 @@ jobs:
 
       # Run Semantic Release - it will decide whether to create a release
       - name: Run Semantic Release
+        if: github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/commit-analyzer --package @semantic-release/github --package @semantic-release/release-notes-generator semantic-release
+
+      # Manual prerelease via workflow_dispatch
+      - name: Create Prerelease
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: ${{ github.event.inputs.tag }}
+          prerelease: true
+          files: |
+            artifacts/**/*
+          fail_on_unmatched_files: false
