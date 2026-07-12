@@ -29,6 +29,26 @@ public:
     Q_INVOKABLE bool connectSerialDevice(const QSerialPortInfo &portInfo);
     Q_INVOKABLE void disconnect();
 
+    /**
+     * @brief Detect which PLD protocol a single serial line belongs to.
+     *
+     * @param line A trimmed serial line.
+     * @param protocol Out parameter set to PLD20 or PLD28 on success.
+     * @return true if the line matches a PLD protocol, false otherwise.
+     */
+    static bool detectPLDProtocol(const QByteArray &line, SerialProtocol &protocol);
+
+    /**
+     * @brief Parse the 8-hex-digit data portion of a PLD line.
+     *
+     * @param line A trimmed serial line (the first 8 hex chars are parsed).
+     * @param protocol PLD20 or PLD28, used to select voltage/current quanta.
+     * @param out Receives the parsed PowerData on success.
+     * @return true if parsing succeeded, false otherwise.
+     */
+    static bool parsePLDLine(const QByteArray &line, SerialProtocol protocol,
+                             PowerData &out);
+
 public slots:
     bool tryConnect(const QString &portName);
 
