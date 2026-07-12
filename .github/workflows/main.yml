@@ -114,10 +114,16 @@ jobs:
             distro: ubuntu-24.04
           - name: Linux-Debian
             runs-on: ubuntu-latest
-            container: debian:bookworm
+            container: debian:trixie
             generator: "Unix Makefiles"
             build_type: Release
-            distro: debian-12
+            distro: debian-13
+          - name: Linux-Fedora
+            runs-on: ubuntu-latest
+            container: fedora:latest
+            generator: "Unix Makefiles"
+            build_type: Release
+            distro: fedora
           - name: macOS
             runs-on: macos-latest
             generator: "Unix Makefiles"
@@ -159,6 +165,28 @@ jobs:
           echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
           echo "Next version will be: $NEXT_VERSION"
 
+      - name: Get Release Version
+        id: release_version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ inputs.tag }}" ]; then
+            # Keep the full prerelease tag for release asset filenames
+            echo "version=$(echo '${{ inputs.tag }}' | sed 's/^[vV]//')" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ steps.get_version.outputs.version }}" >> $GITHUB_OUTPUT
+          fi
+          echo "Release version for filenames: $(cat $GITHUB_OUTPUT | grep '^version=' | cut -d= -f2)"
+
+      - name: Get Package Version
+        id: package_version
+        shell: bash
+        run: |
+          # Debian/RPM prerelease ordering: 1.5.0-beta.1 -> 1.5.0~beta.1
+          RELEASE="${{ steps.release_version.outputs.version }}"
+          PKG=$(echo "$RELEASE" | sed 's/-/~/')
+          echo "version=$PKG" >> $GITHUB_OUTPUT
+          echo "Package version for DEB/RPM metadata: $PKG"
+
       - name: Setup Python environment (macOS)
         if: matrix.name == 'macOS'
         run: |
@@ -193,14 +221,21 @@ jobs:
           modules: 'qtserialport qtconnectivity qtmultimedia'
           cache: true
 
-      - name: Install additional Linux dependencies
-        if: startsWith(matrix.name, 'Linux')
+      - name: Install additional Linux dependencies (Debian/Ubuntu)
+        if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
         run: |
           if [ -f /usr/bin/sudo ]; then SUDO=sudo; else SUDO=; fi
           $SUDO apt-get update
-          $SUDO apt-get install -y build-essential cmake git libgl1-mesa-dev libxkbcommon-x11-0 rpm
+          $SUDO apt-get install -y build-essential cmake git libgl1-mesa-dev libxkbcommon-x11-0
           # Install system Qt6 instead of using qt-installer
           $SUDO apt-get install -y qt6-base-dev qt6-serialport-dev qt6-connectivity-dev qt6-multimedia-dev
+
+      - name: Install additional Linux dependencies (Fedora)
+        if: matrix.name == 'Linux-Fedora'
+        run: |
+          dnf install -y gcc-c++ cmake git mesa-libGL-devel libxkbcommon-x11-devel \
+            qt6-qtbase-devel qt6-qtserialport-devel qt6-qtconnectivity-devel qt6-qtmultimedia-devel \
+            rpm-build
 
       - name: Import Code-Signing Certificates
         if: matrix.name == 'macOS'
@@ -217,16 +252,18 @@ jobs:
       - name: Configure CMake for Windows
         if: matrix.name == 'Windows'
         run: |
-          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" -DPROJECT_VERSION_OVERRIDE="${{ steps.get_version.outputs.version }}"
+          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" -DPROJECT_VERSION_OVERRIDE="${{ steps.get_version.outputs.version }}" -DCPACK_PACKAGE_VERSION="${{ steps.release_version.outputs.version }}"
 
       - name: Configure CMake (non-Windows)
         if: matrix.name != 'Windows'
         run: >
-          cmake -B ${{github.workspace}}/build 
-          -G "${{matrix.generator}}" 
+          cmake -B ${{github.workspace}}/build
+          -G "${{matrix.generator}}"
           -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
           -DCMAKE_PREFIX_PATH=${{env.Qt6_DIR}}
           -DPROJECT_VERSION_OVERRIDE="${{ steps.get_version.outputs.version }}"
+          -DCPACK_DEBIAN_PACKAGE_VERSION="${{ steps.package_version.outputs.version }}"
+          -DCPACK_RPM_PACKAGE_VERSION="${{ steps.package_version.outputs.version }}"
           -DLINUX_DISTRO="${{ matrix.distro }}"
           ${{ matrix.name == 'macOS' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
 
@@ -284,17 +321,22 @@ jobs:
           
           # Create a simple tar.gz archive
           cd ${{github.workspace}}/deploy
-          tar -czf ../USB-Power-OSD-Linux-${{ steps.get_version.outputs.version }}-${{ matrix.distro }}.tar.gz linux/
+          tar -czf ../USB-Power-OSD-Linux-${{ steps.release_version.outputs.version }}-${{ matrix.distro }}.tar.gz linux/
 
-      - name: Create DEB and RPM packages (Linux)
-        if: startsWith(matrix.name, 'Linux')
+      - name: Create DEB package (Debian/Ubuntu)
+        if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
         run: |
           cd ${{github.workspace}}/build
           cpack -G DEB
+
+      - name: Create RPM package (Fedora)
+        if: matrix.name == 'Linux-Fedora'
+        run: |
+          cd ${{github.workspace}}/build
           cpack -G RPM
 
       - name: Upload DEB package
-        if: startsWith(matrix.name, 'Linux')
+        if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
         uses: actions/upload-artifact@v7
         with:
           name: linux-deb-${{ matrix.distro }}
@@ -302,7 +344,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload RPM package
-        if: startsWith(matrix.name, 'Linux')
+        if: matrix.name == 'Linux-Fedora'
         uses: actions/upload-artifact@v7
         with:
           name: linux-rpm-${{ matrix.distro }}
@@ -322,14 +364,14 @@ jobs:
           
           # Create a zip archive
           cd ${{github.workspace}}\deploy
-          powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows-${{ steps.get_version.outputs.version }}.zip"
+          powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows-${{ steps.release_version.outputs.version }}.zip"
 
       - name: Upload Windows artifacts
         if: matrix.name == 'Windows'
         uses: actions/upload-artifact@v7
         with:
           name: windows-zip
-          path: ${{github.workspace}}/USB-Power-OSD-Windows-${{ steps.get_version.outputs.version }}.zip
+          path: ${{github.workspace}}/USB-Power-OSD-Windows-${{ steps.release_version.outputs.version }}.zip
           if-no-files-found: error
 
       - name: Create MSI with CPack
@@ -379,12 +421,12 @@ jobs:
           name: windows-msi
           path: "${{ steps.find_msi.outputs.MSI_PATH }}"
 
-      - name: Upload Linux artifacts
-        if: startsWith(matrix.name, 'Linux')
+      - name: Upload Linux tarball
+        if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
         uses: actions/upload-artifact@v7
         with:
           name: linux-build-${{ matrix.distro }}
-          path: ${{github.workspace}}/USB-Power-OSD-Linux-${{ steps.get_version.outputs.version }}-${{ matrix.distro }}.tar.gz
+          path: ${{github.workspace}}/USB-Power-OSD-Linux-${{ steps.release_version.outputs.version }}-${{ matrix.distro }}.tar.gz
           if-no-files-found: error
 
       - name: Deploy Qt libraries (macOS)
@@ -416,10 +458,10 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
         run: |
           # Create a ZIP archive of the app
-          ditto -c -k --keepParent "${{github.workspace}}/build/USB-Power-OSD.app" "${{github.workspace}}/build/USB-Power-OSD-${{ steps.get_version.outputs.version }}.zip"
-          
+          ditto -c -k --keepParent "${{github.workspace}}/build/USB-Power-OSD.app" "${{github.workspace}}/build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip"
+
           # Notarize the app via ZIP
-          xcrun notarytool submit "${{github.workspace}}/build/USB-Power-OSD-${{ steps.get_version.outputs.version }}.zip" \
+          xcrun notarytool submit "${{github.workspace}}/build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_ID_PASSWORD" \
             --team-id "${{ vars.APPLE_TEAM_ID }}" \
@@ -433,20 +475,24 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: macos-zip
-          path: ${{github.workspace}}/build/USB-Power-OSD-${{ steps.get_version.outputs.version }}.zip
+          path: ${{github.workspace}}/build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip
           if-no-files-found: error
 
       # Create dmg
       - name: Create dmg
         if: matrix.name == 'macOS'
         run: |
-          hdiutil create -volname "MacWake USB Power OSD" -srcfolder "build/USB-Power-OSD.app" "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg"
+          # Stage the app and the user manual together for the DMG
+          mkdir -p "build/dmg-staging"
+          cp -R "build/USB-Power-OSD.app" "build/dmg-staging/"
+          cp "build/USER_MANUAL.html" "build/dmg-staging/User Manual.html"
+          hdiutil create -volname "MacWake USB Power OSD" -srcfolder "build/dmg-staging" "build/Macwake USB Power ${{ steps.release_version.outputs.version }}.dmg"
 
       # Notarize dmg
       - name: Notarize app
         if: matrix.name == 'macOS'
         run: |
-          xcrun notarytool submit "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg" \
+          xcrun notarytool submit "build/Macwake USB Power ${{ steps.release_version.outputs.version }}.dmg" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_PASSWORD" \
@@ -460,14 +506,14 @@ jobs:
       - name: Staple app
         if: matrix.name == 'macOS'
         run: |
-          xcrun stapler staple "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg"
+          xcrun stapler staple "build/Macwake USB Power ${{ steps.release_version.outputs.version }}.dmg"
 
       - name: Upload artifact
         if: matrix.name == 'macOS'
         uses: actions/upload-artifact@v7
         with:
           name: macOS Application Image
-          path: "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg"
+          path: "build/Macwake USB Power ${{ steps.release_version.outputs.version }}.dmg"
 
   release:
     name: Publish New Release
