@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CPackWiXPatch>
+  <!-- Start menu shortcut to the application -->
   <CPackWiXFragment Id="CM_SHORTCUT_START_MENU.usb-power-osd">
     <DirectoryRef Id="CM_DP_ProgramMenuFolder.usb-power-osd">
       <Component Id="CM_SHORTCUT_START_MENU.usb-power-osd" Guid="*">
@@ -7,6 +8,11 @@
                   Name="USB Power OSD"
                   Description="USB Power monitoring and OSD application"
                   Target="[#CM_FP_usb_power_osd.USB_Power_OSD.exe]"
+                  WorkingDirectory="INSTALL_ROOT"/>
+        <Shortcut Id="CM_S_USB_Power_OSD_Manual"
+                  Name="USB Power OSD Manual"
+                  Description="Open the USB Power OSD user manual"
+                  Target="[INSTALL_ROOT]USER_MANUAL.html"
                   WorkingDirectory="INSTALL_ROOT"/>
         <RemoveFolder Id="CM_DP_ProgramMenuFolder.usb-power-osd" On="uninstall"/>
         <RegistryValue Root="HKCU"
@@ -17,5 +23,24 @@
                        KeyPath="yes"/>
       </Component>
     </DirectoryRef>
+  </CPackWiXFragment>
+
+  <!-- Optional checkbox on the exit dialog to open the manual after install -->
+  <CPackWiXFragment Id="CM_EXIT_DIALOG_CHECKBOX">
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Open the USB Power OSD User Manual after installation"/>
+    <Property Id="OPENUSERMANUAL" Value="1"/>
+
+    <CustomAction Id="OpenUserManual"
+                  Directory="INSTALL_ROOT"
+                  ExeCommand="cmd.exe /c start &quot;&quot; &quot;[INSTALL_ROOT]USER_MANUAL.html&quot;"
+                  Execute="immediate"
+                  Return="asyncNoWait"
+                  Impersonate="yes"/>
+
+    <InstallExecuteSequence>
+      <Custom Action="OpenUserManual" After="InstallFinalize">
+        <![CDATA[OPENUSERMANUAL = "1" AND NOT Installed AND NOT REMOVE]]>
+      </Custom>
+    </InstallExecuteSequence>
   </CPackWiXFragment>
 </CPackWiXPatch>

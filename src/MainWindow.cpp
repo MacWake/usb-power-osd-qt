@@ -3,10 +3,14 @@
 #include "AboutDialog.h"
 #include "DeviceSelectionDialog.h"
 #include <QApplication>
+#include <QDesktopServices>
+#include <QDir>
 #include <QLabel>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QStatusBar>
 #include <QTimer>
+#include <QUrl>
 #include <QWidget>
 #include <QDebug>
 #include <cmath>
@@ -271,6 +275,9 @@ void MainWindow::setupUI() {
     connect(peaksAction, &QAction::toggled, this, &MainWindow::toggleGraphPeaks);
 
     auto *helpMenu = menuBar()->addMenu(tr("&Help"));
+    QAction *manualAction = helpMenu->addAction(tr("&User Manual"));
+    manualAction->setShortcut(QKeySequence("F1"));
+    connect(manualAction, &QAction::triggered, this, &MainWindow::showUserManual);
     QAction *aboutAction = helpMenu->addAction(tr("&About"));
     connect(aboutAction, &QAction::triggered, this, &MainWindow::showAboutDialog);
 
@@ -571,6 +578,40 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
 void MainWindow::showAboutDialog() {
     AboutDialog aboutDialog(this);
     aboutDialog.exec();
+}
+
+void MainWindow::showUserManual() {
+    const QString manualFileName = "USER_MANUAL.html";
+    QStringList candidates;
+
+    const QString appDir = QCoreApplication::applicationDirPath();
+
+#ifdef Q_OS_MACOS
+    candidates << QDir(appDir).filePath("../Resources/" + manualFileName);
+    candidates << QDir(appDir).filePath(manualFileName);
+#elif defined(Q_OS_WIN)
+    candidates << QDir(appDir).filePath(manualFileName);
+#else
+    candidates << "/usr/share/doc/usb-power-osd/" + manualFileName;
+    candidates << "/usr/local/share/doc/usb-power-osd/" + manualFileName;
+    candidates << QDir(appDir).filePath("../share/doc/usb-power-osd/" + manualFileName);
+    candidates << QDir(appDir).filePath(manualFileName);
+#endif
+
+    for (const QString &path : candidates) {
+        QFileInfo info(path);
+        if (info.exists() && info.isFile()) {
+            QUrl url = QUrl::fromLocalFile(info.absoluteFilePath());
+            if (QDesktopServices::openUrl(url)) {
+                return;
+            }
+        }
+    }
+
+    QMessageBox::warning(this, tr("User Manual"),
+                         tr("Could not find the user manual (%1).\n"
+                            "Please visit the project page for documentation.")
+                             .arg(manualFileName));
 }
 
 void MainWindow::toggleGraphLogScale() {
