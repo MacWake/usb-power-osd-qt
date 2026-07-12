@@ -29,6 +29,10 @@ public:
     void panView(int directionMs);
     void refresh();
 
+    [[nodiscard]] double visibleMinCurrent() const { return m_visibleMinCurrent; }
+    [[nodiscard]] double visibleMaxCurrent() const { return m_visibleMaxCurrent; }
+    [[nodiscard]] bool hasVisibleData() const { return m_hasVisibleData; }
+
 signals:
     void reviewModeChanged(bool reviewing);
 
@@ -65,4 +69,8 @@ private:
     qint64 m_liveRightEdgeMs = 0; // right edge quantized to whole pixels
     static constexpr int PanKeyStepMs = 1000;
     static constexpr int PanWheelStepMs = 5000;
+
+    double m_visibleMinCurrent = 0.0;
+    double m_visibleMaxCurrent = 0.0;
+    bool m_hasVisibleData = false;
 };

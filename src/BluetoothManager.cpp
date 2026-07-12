@@ -192,15 +192,19 @@ void BluetoothManager::cleanupController()
     m_isConnecting = false;
     if (m_controller) {
         m_controller->disconnect(this);
-        if (m_controller->state() != QLowEnergyController::UnconnectedState)
+        if (m_controller->state() != QLowEnergyController::UnconnectedState) {
             m_controller->disconnectFromDevice();
-        m_controller->deleteLater();
+        }
+        // deleteLater after the event loop has processed any pending signals.
+        auto *oldController = m_controller;
         m_controller = nullptr;
+        oldController->deleteLater();
     }
     if (m_service) {
         m_service->disconnect(this);
-        m_service->deleteLater();
+        auto *oldService = m_service;
         m_service = nullptr;
+        oldService->deleteLater();
     }
 }
 

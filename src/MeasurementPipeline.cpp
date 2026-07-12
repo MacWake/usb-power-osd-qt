@@ -58,6 +58,23 @@ void MeasurementPipeline::pushSample(const PowerData &sample) {
     m_isPaused = false;
   }
 
+  // Map device-relative timestamps to local wall-clock time using an epoch
+  // learned from the first valid sample. This preserves relative timing and
+  // allows the display to reflect packet delays, while keeping serial and BLE
+  // samples on the same time base.
+  qint64 effectiveSampleTs = sampleTs;
+  if (isValid) {
+    if (!m_timestampEpochSet) {
+      m_timestampEpochOffsetMs = wallNow - sampleTs;
+      m_timestampEpochSet = true;
+    }
+    effectiveSampleTs = sampleTs + m_timestampEpochOffsetMs;
+  } else if (!m_timestampEpochSet) {
+    // No epoch yet; fall back to wall-clock so invalid samples don't land far
+    // in the past/future before the first real measurement.
+    effectiveSampleTs = wallNow;
+  }
+
   // Compensate the stream time for the wall-clock pause duration so the graph
   // does not show a gap when data resumes after a pause/disconnect.
   if (m_isPaused) {
@@ -74,7 +91,7 @@ void MeasurementPipeline::pushSample(const PowerData &sample) {
     m_pauseStartMs = 0;
   }
 
-  const qint64 streamTs = sampleTs - m_pauseOffsetMs;
+  const qint64 streamTs = effectiveSampleTs - m_pauseOffsetMs;
   const qint64 bucketTs = bucketTimestampFor(streamTs);
   auto it = m_frameBuckets.find(bucketTs);
   if (it == m_frameBuckets.end()) {
@@ -113,6 +130,8 @@ void MeasurementPipeline::reset() {
     m_lastValidWallClockMs = 0;
     m_pauseOffsetMs = 0;
     m_pauseStartMs = 0;
+    m_timestampEpochOffsetMs = 0;
+    m_timestampEpochSet = false;
     m_isPaused = false;
   }
 }

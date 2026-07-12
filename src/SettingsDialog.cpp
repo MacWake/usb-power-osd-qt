@@ -94,7 +94,7 @@ void SettingsDialog::setupUI() // ReSharper disable once CppDFAMemoryLeak
     });
 
     m_graphPixelsPerSecond = new QSpinBox();
-    m_graphPixelsPerSecond->setRange(1, 20);
+    m_graphPixelsPerSecond->setRange(1, 99);
     m_graphPixelsPerSecond->setSuffix(" px/s");
     m_graphPixelsPerSecond->setValue(static_cast<int>(this->m_settings->graph_pixels_per_second));
     osdLayout->addRow("Graph pixels per second:", m_graphPixelsPerSecond);
