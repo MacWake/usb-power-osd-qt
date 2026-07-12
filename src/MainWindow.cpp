@@ -205,7 +205,7 @@ void MainWindow::setupUI() {
     this->lblVoltage->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     this->lblCurrent->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     this->lblPower->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    this->lblEnergy->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+    this->lblEnergy->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     this->lblMinMaxCurrent->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     this->lblMinMaxCurrent->setAttribute(Qt::WA_Hover, true);
     this->lblMinMaxCurrent->installEventFilter(this);
@@ -297,16 +297,9 @@ void MainWindow::positionWidgets() {
     // Top row - voltage and current side by side
     const int topY = margin;
     const int leftColumnX = margin;
-    const int rightColumnX = windowWidth / 2;
     const int lineSpacing = -10;
 
-    const int smallWidth =
-            windowWidth / 4 -
-            margin; // lblPower->fontMetrics().averageCharWidth() * 8;
     const int smallHeight = lblPower->fontMetrics().height() + 10;
-    const int smallWideWidth =
-            windowWidth / 2 -
-            margin; // lblPower->fontMetrics().averageCharWidth() * 16;
 
     // Position voltage label (top left)
     lblVoltage->move(leftColumnX, topY);
@@ -322,14 +315,22 @@ void MainWindow::positionWidgets() {
     const int secondRowY =
             topY + lblVoltage->height() + labelSpacing + lineSpacing;
 
-    lblPower->move(leftColumnX, secondRowY);
-    lblPower->resize(smallWidth * 2, smallHeight);
+    // Allocate horizontal space proportionally to the expected text widths:
+    // power ~ 1/4, energy ~ 1/4 (centered between the other two),
+    // min/max current ~ 1/2 of the available width.
+    const int secondRowWidth = windowWidth - 2 * margin;
+    const int powerWidth = secondRowWidth / 4;
+    const int energyWidth = secondRowWidth / 4;
+    const int minmaxWidth = secondRowWidth - powerWidth - energyWidth;
 
-    lblEnergy->move(leftColumnX + smallWidth / 2, secondRowY);
-    lblEnergy->resize(smallWidth * 2, smallHeight);
+    lblPower->move(margin, secondRowY);
+    lblPower->resize(powerWidth, smallHeight);
 
-    lblMinMaxCurrent->move(leftColumnX, secondRowY);
-    lblMinMaxCurrent->resize(windowWidth - margin * 2, smallHeight);
+    lblEnergy->move(margin + powerWidth, secondRowY);
+    lblEnergy->resize(energyWidth, smallHeight);
+
+    lblMinMaxCurrent->move(margin + powerWidth + energyWidth, secondRowY);
+    lblMinMaxCurrent->resize(minmaxWidth, smallHeight);
 
     // Position CurrentGraph widget at the bottom
     const int graphY = secondRowY + smallHeight + labelSpacing;
@@ -387,6 +388,7 @@ void MainWindow::onDeviceConnected(const QString &deviceName) {
     showStatusMessage("Connected to " + deviceName);
     m_pipeline->reset();
     m_history->reset();
+    m_currentGraph->setLive();
     m_updateTimer->start();
 }
 
@@ -417,8 +419,10 @@ void MainWindow::updateLabels() {
 
     DisplayFrame lastFrame = m_pipeline->latestFrame();
 
-    if (m_history->is_empty() ||
-        !m_history->minMaxCurrentLastN(m_history->size(), totalMinCurrent, totalMaxCurrent)) {
+    if (m_currentGraph->hasVisibleData()) {
+        totalMinCurrent = m_currentGraph->visibleMinCurrent();
+        totalMaxCurrent = m_currentGraph->visibleMaxCurrent();
+    } else {
         totalMinCurrent = 0.0;
         totalMaxCurrent = 0.0;
     }
@@ -456,15 +460,17 @@ void MainWindow::updateUINoData() {
     if (m_audioGenerator) {
         m_audioGenerator->setAmplitude(0.0);
     }
-    double totalMinCurrent;
-    double totalMaxCurrent;
-    this->m_history->minMaxCurrentLastN(this->m_history->size(), totalMinCurrent,
-                                        totalMaxCurrent);
+    double totalMinCurrent = 0.0;
+    double totalMaxCurrent = 0.0;
+    if (m_currentGraph->hasVisibleData()) {
+        totalMinCurrent = m_currentGraph->visibleMinCurrent();
+        totalMaxCurrent = m_currentGraph->visibleMaxCurrent();
+    }
     lblVoltage->setText(QString("---"));
     lblCurrent->setText(QString("---"));
     lblPower->setText(QString("---"));
     lblEnergy->setText(QString("---"));
-    lblMinMaxCurrent->setText(QString("%1 - %2A")
+    lblMinMaxCurrent->setText(QString("%1-%2A")
         .arg(totalMinCurrent, 0, 'f', 3)
         .arg(totalMaxCurrent, 0, 'f', 3));
 }
@@ -481,11 +487,17 @@ void MainWindow::setBackgroundColor(const QColor &color) {
 void MainWindow::resetMeasurementHistory() {
     if (m_history) {
         m_history->reset();
-        showStatusMessage("Measurement history reset", 3000);
-
-        // Update labels immediately to reflect the reset
-        updateLabels();
     }
+    if (m_pipeline) {
+        m_pipeline->reset();
+    }
+    if (m_currentGraph) {
+        m_currentGraph->setLive();
+    }
+    showStatusMessage("Measurement history reset", 3000);
+
+    // Update labels immediately to reflect the reset
+    updateLabels();
 }
 
 void MainWindow::setBaseCurrent() {

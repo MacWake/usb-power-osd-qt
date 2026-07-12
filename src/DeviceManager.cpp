@@ -17,14 +17,14 @@ DeviceManager::DeviceManager(QObject *parent)
   connect(m_bluetoothManager, &PowerDataSource::disconnected, this,
           &DeviceManager::onSourceDisconnected);
   connect(m_bluetoothManager, &PowerDataSource::sampleReceived, this,
-          &DeviceManager::onSampleReceived);
+          &DeviceManager::onSampleReceived, Qt::QueuedConnection);
 
   connect(m_serialManager, &PowerDataSource::connected, this,
           &DeviceManager::onSourceConnected);
   connect(m_serialManager, &PowerDataSource::disconnected, this,
           &DeviceManager::onSourceDisconnected);
   connect(m_serialManager, &PowerDataSource::sampleReceived, this,
-          &DeviceManager::onSampleReceived);
+          &DeviceManager::onSampleReceived, Qt::QueuedConnection);
 
   m_serialThread->start();
 }
@@ -37,7 +37,13 @@ DeviceManager::~DeviceManager() {
 
 void DeviceManager::setActiveSource(PowerDataSource *source) {
   if (m_activeSource && m_activeSource != source) {
-    m_activeSource->stop();
+    if (m_activeSource == m_serialManager) {
+      // SerialManager lives on m_serialThread; stop it there to avoid touching
+      // QSerialPort from the main thread.
+      QMetaObject::invokeMethod(m_serialManager, "stop", Qt::QueuedConnection);
+    } else {
+      m_activeSource->stop();
+    }
   }
   m_activeSource = source;
 }
@@ -77,63 +83,81 @@ bool DeviceManager::isBLEAutoConnect() const {
 }
 
 void DeviceManager::onSourceConnected(const QString &deviceName) {
-  if (auto *source = qobject_cast<PowerDataSource *>(sender())) {
-    if (source == m_bluetoothManager) {
-      m_isBluetoothConnected = true;
-      m_isSerialConnected = false;
-      QMetaObject::invokeMethod(m_serialManager, "disconnect", Qt::QueuedConnection);
-    } else if (source == m_serialManager) {
-      m_isSerialConnected = true;
-      m_isBluetoothConnected = false;
-      m_bluetoothManager->stopScanning();
-      m_bluetoothManager->disconnect();
-    }
-
-    if (m_settings) {
-      m_settings->last_device = deviceName;
-      m_settings->saveSettings();
-    }
-
-    QString suffix;
-    if (source == m_bluetoothManager) {
-      suffix = " (Bluetooth)";
-    } else if (source == m_serialManager) {
-      suffix = " (Serial)";
-    }
-    emit deviceConnected(deviceName + suffix);
+  auto *source = qobject_cast<PowerDataSource *>(sender());
+  if (!source) {
+    return;
   }
+
+  // Ignore stale signals from a source that is no longer the active one.
+  if (m_activeSource && source != m_activeSource) {
+    qDebug() << "Ignoring connected signal from inactive source";
+    return;
+  }
+
+  if (source == m_bluetoothManager) {
+    m_isBluetoothConnected = true;
+    m_isSerialConnected = false;
+    QMetaObject::invokeMethod(m_serialManager, "disconnect", Qt::QueuedConnection);
+  } else if (source == m_serialManager) {
+    m_isSerialConnected = true;
+    m_isBluetoothConnected = false;
+    m_bluetoothManager->stopScanning();
+    m_bluetoothManager->disconnect();
+  }
+
+  if (m_settings) {
+    m_settings->last_device = deviceName;
+    m_settings->saveSettings();
+  }
+
+  QString suffix;
+  if (source == m_bluetoothManager) {
+    suffix = " (Bluetooth)";
+  } else if (source == m_serialManager) {
+    suffix = " (Serial)";
+  }
+  emit deviceConnected(deviceName + suffix);
 }
 
 void DeviceManager::onSourceDisconnected() {
-  if (auto *source = qobject_cast<PowerDataSource *>(sender())) {
-    if (source == m_bluetoothManager) {
-      m_isBluetoothConnected = false;
-    } else if (source == m_serialManager) {
-      m_isSerialConnected = false;
-    }
+  auto *source = qobject_cast<PowerDataSource *>(sender());
+  if (!source) {
+    return;
+  }
 
-    if (!m_isBluetoothConnected && !m_isSerialConnected) {
-      emit deviceDisconnected();
-      if (auto *mw = qobject_cast<MainWindow *>(parent())) {
-        mw->startReconnectTimer();
-      }
+  // Ignore stale disconnect signals from a source that is no longer active.
+  if (m_activeSource && source != m_activeSource) {
+    qDebug() << "Ignoring disconnected signal from inactive source";
+    return;
+  }
+
+  if (source == m_bluetoothManager) {
+    m_isBluetoothConnected = false;
+  } else if (source == m_serialManager) {
+    m_isSerialConnected = false;
+  }
+
+  if (!m_isBluetoothConnected && !m_isSerialConnected) {
+    emit deviceDisconnected();
+    if (auto *mw = qobject_cast<MainWindow *>(parent())) {
+      mw->startReconnectTimer();
     }
   }
 }
 
 void DeviceManager::onSampleReceived(const PowerData &data) {
-  if (auto *source = qobject_cast<PowerDataSource *>(sender())) {
-    if (source == m_serialManager) {
-      // Serial data is already in PowerData form; forward directly.
-      emit powerDataReceived(data);
-      return;
-    }
-    if (source == m_bluetoothManager) {
-      // BLE JSON path already provides parsed PowerData; the PowerMonitor is
-      // kept around for future binary BLE/serial parsing.
-      emit powerDataReceived(data);
-      return;
-    }
+  auto *source = qobject_cast<PowerDataSource *>(sender());
+  if (!source) {
+    return;
   }
-  emit powerDataReceived(data);
+
+  // Only forward samples from the active source. Stale samples from a source
+  // that is being shut down can otherwise touch deleted objects downstream.
+  if (m_activeSource && source != m_activeSource) {
+    return;
+  }
+
+  if (source == m_serialManager || source == m_bluetoothManager) {
+    emit powerDataReceived(data);
+  }
 }

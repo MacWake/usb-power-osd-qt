@@ -453,14 +453,9 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
       }
       viewRightMs = m_liveRightEdgeMs;
     } else {
-      // Quantize the live right edge to whole pixel columns. This prevents
-      // sub-pixel aliasing that makes the historic trace appear to jump up/down
-      // while the graph is continuously scrolling.
-      const qint64 msPerPixel =
-          static_cast<qint64>(std::round(1000.0 / pixelsPerSecond));
-      if (m_liveRightEdgeMs == 0 || newestTime >= m_liveRightEdgeMs + msPerPixel) {
-        m_liveRightEdgeMs = newestTime - (newestTime % msPerPixel);
-      }
+      // Track the newest sample directly in live mode. Quantizing the right edge
+      // caused the trace to disappear or reset when timestamps jumped slightly.
+      m_liveRightEdgeMs = newestTime;
       viewRightMs = m_liveRightEdgeMs;
     }
   } else {
@@ -501,6 +496,12 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
       maxCurrent = std::max(maxCurrent, frame.current);
     }
   }
+
+  // Remember these for the numeric min/max label so it always matches the graph.
+  m_hasVisibleData = haveData;
+  m_visibleMinCurrent = haveData ? minCurrent : 0.0;
+  m_visibleMaxCurrent = haveData ? maxCurrent : 0.0;
+
   if (!haveData) {
     minCurrent = 0.0;
     maxCurrent = 0.01;

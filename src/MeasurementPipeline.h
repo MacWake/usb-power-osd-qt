@@ -101,6 +101,8 @@ private:
   qint64 m_lastValidWallClockMs = 0; // for real-time pause detection
   qint64 m_pauseOffsetMs = 0;        // subtract from sample timestamps to keep stream contiguous
   qint64 m_pauseStartMs = 0;           // wall-clock time when pause began
+  qint64 m_timestampEpochOffsetMs = 0; // offset to map device-relative timestamps to local wall-clock
+  bool m_timestampEpochSet = false;    // true once the first valid sample has set the epoch
   bool m_isPaused = false;
 
   QTimer *m_frameTimer = nullptr;

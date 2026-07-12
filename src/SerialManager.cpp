@@ -189,7 +189,10 @@ void SerialManager::disconnect() {
 }
 
 QString SerialManager::sourceName() const {
-  return m_serialPort ? m_serialPort->portName() : QString{};
+  if (!m_serialPort || QThread::currentThread() != m_serialPort->thread()) {
+    return QString{};
+  }
+  return m_serialPort->portName();
 }
 
 bool SerialManager::isConnected() const {
