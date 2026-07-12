@@ -28,10 +28,10 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: '6.7.2'
         target: ${{ matrix.qt_target }}
@@ -83,7 +83,7 @@ jobs:
         cpack -G TGZ
         
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: usb-power-osd-qt-${{ matrix.os }}
         path: build/usb-power-osd-qt-*
@@ -95,7 +95,7 @@ jobs:
     
     steps:
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       
     - name: Upload release assets
       uses: softprops/action-gh-release@v1
@@ -107,7 +107,7 @@ jobs:
 
           # Set up Node.js for Semantic Release
           - name: Set Up Node.js
-            uses: actions/setup-node@v3
+            uses: actions/setup-node@v5
             with:
               node-version: '22'
 

@@ -24,12 +24,12 @@ jobs:
           - name: Linux
             runs-on: ubuntu-24.04
           - name: Windows
-            runs-on: windows-latest
+            runs-on: windows-2022
           - name: macOS
             runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install additional Linux dependencies
         if: matrix.name == 'Linux'
@@ -111,17 +111,17 @@ jobs:
             generator: "Unix Makefiles"
             build_type: Release
           - name: Windows
-            runs-on: windows-latest
+            runs-on: windows-2022
             build_type: Release
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       # Get version from semantic-release
       - name: Set Up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -470,7 +470,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -481,7 +481,7 @@ jobs:
 
       # Set up Node.js for Semantic Release
       - name: Set Up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
