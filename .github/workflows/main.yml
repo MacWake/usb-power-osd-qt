@@ -101,7 +101,7 @@ jobs:
     name: Release Build on ${{ matrix.name }}
     if: >
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true')
+      (github.event_name == 'workflow_dispatch' && inputs.prerelease == true)
     runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
@@ -476,7 +476,7 @@ jobs:
     needs: release-build
     if: >
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true')
+      (github.event_name == 'workflow_dispatch' && inputs.prerelease == true)
     runs-on: ubuntu-latest
     permissions:
       contents: write
