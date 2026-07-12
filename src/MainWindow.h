@@ -71,6 +71,7 @@ private slots:
     void resetBaseCurrent();
 
     void showAboutDialog();
+    void showUserManual();
 
     void toggleAudio();
     void toggleGraphLogScale();

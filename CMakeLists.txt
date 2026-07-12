@@ -85,6 +85,25 @@ set(RESOURCES
         resources/resources.qrc
 )
 
+# Python is needed to convert the Markdown user manual to HTML
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+# Convert user manual Markdown to HTML at build time
+set(USER_MANUAL_MD "${CMAKE_SOURCE_DIR}/docs/USER_MANUAL.md")
+set(USER_MANUAL_HTML "${CMAKE_BINARY_DIR}/USER_MANUAL.html")
+set(USER_MANUAL_CONVERTER "${CMAKE_SOURCE_DIR}/docs/md2html.py")
+
+add_custom_command(
+    OUTPUT ${USER_MANUAL_HTML}
+    COMMAND ${CMAKE_COMMAND} -E echo "Converting user manual to HTML..."
+    COMMAND Python3::Interpreter ${USER_MANUAL_CONVERTER} ${USER_MANUAL_MD} ${USER_MANUAL_HTML}
+    DEPENDS ${USER_MANUAL_MD} ${USER_MANUAL_CONVERTER}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Building user manual HTML"
+)
+
+add_custom_target(user_manual_html ALL DEPENDS ${USER_MANUAL_HTML})
+
 qt_add_executable(usb-power-osd ${SOURCES} ${HEADERS} ${UI_FILES} ${RESOURCES})
 
 target_link_libraries(usb-power-osd PRIVATE
@@ -163,7 +182,18 @@ if (WIN32)
     
     # Install MSVC runtime libraries to root directory (not bin)
     set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+
+    # Install user manual next to the executable on Windows
+    install(FILES ${USER_MANUAL_HTML}
+            DESTINATION .
+            RENAME USER_MANUAL.html
+    )
 elseif(APPLE)
+    # Copy the user manual into the app bundle resources
+    set_source_files_properties(${USER_MANUAL_HTML}
+        PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(usb-power-osd PRIVATE ${USER_MANUAL_HTML})
+
     install(TARGETS usb-power-osd
             BUNDLE DESTINATION .
     )
@@ -172,7 +202,7 @@ else()
     install(TARGETS usb-power-osd
             RUNTIME DESTINATION bin
     )
-    
+
     # Install desktop file
     if(EXISTS ${CMAKE_SOURCE_DIR}/usbc-power-osd.desktop)
         install(FILES ${CMAKE_SOURCE_DIR}/usbc-power-osd.desktop
@@ -180,11 +210,24 @@ else()
                 RENAME usb-power-osd.desktop
         )
     endif()
-    
+
     # Install icon
     if(EXISTS ${CMAKE_SOURCE_DIR}/usb-power-osd.png)
         install(FILES ${CMAKE_SOURCE_DIR}/usb-power-osd.png
                 DESTINATION share/icons/hicolor/256x256/apps
+        )
+    endif()
+
+    # Install user manual
+    install(FILES ${USER_MANUAL_HTML}
+            DESTINATION share/doc/usb-power-osd
+            RENAME USER_MANUAL.html
+    )
+
+    # Install desktop shortcut to open the user manual
+    if(EXISTS ${CMAKE_SOURCE_DIR}/usb-power-osd-manual.desktop)
+        install(FILES ${CMAKE_SOURCE_DIR}/usb-power-osd-manual.desktop
+                DESTINATION share/applications
         )
     endif()
 endif()
@@ -229,18 +272,20 @@ elseif(UNIX AND NOT APPLE)
     
     # DEB dependencies for Ubuntu/Debian
     if(LINUX_DISTRO STREQUAL "ubuntu-24.04")
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS 
-            "libqt6core6t64, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libqt6multimedia6, libgl1-mesa-glx | libgl1, libxkbcommon-x11-0"
+        # Ubuntu 24.04 renamed core/gui/widgets Qt6 packages to the t64 ABI suffix
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS
+            "libqt6core6t64, libqt6gui6t64, libqt6widgets6t64, libqt6serialport6, libqt6bluetooth6, libqt6multimedia6, libgl1, libxkbcommon-x11-0"
         )
     else()
-        # Default/Debian stable dependencies
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS 
-            "libqt6core6, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libqt6multimedia6, libgl1-mesa-glx | libgl1, libxkbcommon-x11-0"
+        # Debian 12 (Bookworm) and 13 (Trixie) keep the original Qt6 package names
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS
+            "libqt6core6, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libqt6multimedia6, libgl1, libxkbcommon-x11-0"
         )
     endif()
-    
-    # Enable automatic dependency detection as fallback
-    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+    # Do not mix automatic shlibdeps with the manually curated list above;
+    # it produces conflicting versioned dependencies on distros with ABI renames.
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
     
     # RPM-specific settings
     set(CPACK_RPM_PACKAGE_NAME "usb-power-osd")
@@ -251,19 +296,20 @@ elseif(UNIX AND NOT APPLE)
     
     # RPM dependencies for Fedora/RHEL/openSUSE
     set(CPACK_RPM_PACKAGE_REQUIRES
-        "qt6-qtbase, qt6-qtserialport, qt6-qtconnectivity, qt6-qtmultimedia, mesa-libGL"
+        "qt6-qtbase-gui, qt6-qtbase-widgets, qt6-qtserialport, qt6-qtconnectivity, qt6-qtmultimedia, mesa-libGL"
     )
-    
-    # Enable automatic dependency detection
+
+    # Let rpm auto-detect soname deps as a safety net, but keep the explicit Qt6 list above.
     set(CPACK_RPM_PACKAGE_AUTOREQ ON)
     
-    # Package file names
+    # Package file names. Use per-generator versions so prereleases can use
+    # Debian-style tilde versions (e.g. 1.5.0~beta.1) for proper ordering.
     if(LINUX_DISTRO)
-        set(CPACK_DEBIAN_FILE_NAME "usb-power-osd_${PROJECT_VERSION}_${LINUX_DISTRO}_amd64.deb")
-        set(CPACK_RPM_FILE_NAME "usb-power-osd-${PROJECT_VERSION}-${LINUX_DISTRO}.x86_64.rpm")
+        set(CPACK_DEBIAN_FILE_NAME "usb-power-osd_${CPACK_DEBIAN_PACKAGE_VERSION}_${LINUX_DISTRO}_amd64.deb")
+        set(CPACK_RPM_FILE_NAME "usb-power-osd-${CPACK_RPM_PACKAGE_VERSION}-${LINUX_DISTRO}.x86_64.rpm")
     else()
-        set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")  # usb-power-osd_2.0.0_amd64.deb
-        set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")     # usb-power-osd-2.0.0.x86_64.rpm
+        set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+        set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
     endif()
     
 endif()

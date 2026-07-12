@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=USB Power OSD Manual
+Comment=Read the USB Power OSD user manual
+Exec=xdg-open /usr/share/doc/usb-power-osd/USER_MANUAL.html
+Icon=usbpower
+Categories=Utility;
+StartupNotify=true
+Terminal=false
