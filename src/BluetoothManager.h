@@ -48,19 +48,21 @@ private slots:
 private:
     void connectToDevice(const QBluetoothDeviceInfo &device);
     void cleanupController();
+    void cleanupControllerAsync();
     void setupService();
     void parseJsonAndEmitPowerData(const QByteArray &data);
     static PowerData parseJsonToPowerData(const QJsonObject &json);
-    
+
     QBluetoothDeviceDiscoveryAgent *m_discoveryAgent;
     QLowEnergyController *m_controller;
     QLowEnergyService *m_service;
-    
+
     QBluetoothDeviceInfo m_targetDevice;
     QLowEnergyCharacteristic m_dataCharacteristic;
-    
+
     QTimer *m_scanTimer;
     QTimer *m_connectTimer;
+    QTimer *m_cleanupTimer;
     bool m_isConnected = false;
     bool m_isConnecting = false;
     int m_retryCount = 0;

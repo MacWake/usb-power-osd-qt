@@ -26,7 +26,11 @@ BluetoothManager::BluetoothManager(QObject *parent)
     , m_service(nullptr)
     , m_scanTimer(new QTimer(this))
     , m_connectTimer(new QTimer(this))
+    , m_cleanupTimer(new QTimer(this))
 {
+    m_cleanupTimer->setSingleShot(true);
+    connect(m_cleanupTimer, &QTimer::timeout, this, &BluetoothManager::cleanupController);
+
     connect(this, &BluetoothManager::powerDataReceived, this,
             [this](const PowerData &data) { emit sampleReceived(data); });
     this->m_isActive = false;
@@ -53,7 +57,7 @@ BluetoothManager::BluetoothManager(QObject *parent)
     connect(m_connectTimer, &QTimer::timeout, [this] {
         qDebug() << "BLE connection timed out, aborting";
         m_isConnecting = false;
-        cleanupController();
+        cleanupControllerAsync();
         emit disconnected();
         // Delay rescan so BlueZ can finish processing the disconnect/cancel
         QTimer::singleShot(3000, this, &BluetoothManager::startScanning);
@@ -121,12 +125,12 @@ void BluetoothManager::disconnect()
     stopScanning();
     if (m_controller) {
         qDebug() << "Disconnecting from BLE device...";
-        m_controller->disconnectFromDevice();
-        m_targetDevice = QBluetoothDeviceInfo();
+        // Avoid blocking the main thread; the actual cleanup is deferred.
+        cleanupControllerAsync();
     }
+    m_targetDevice = QBluetoothDeviceInfo();
     m_isConnected = false;
     m_isActive = false;
-    //emit disconnected();
 }
 
 void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
@@ -189,13 +193,13 @@ void BluetoothManager::onScanFinished()
 void BluetoothManager::cleanupController()
 {
     m_connectTimer->stop();
+    m_cleanupTimer->stop();
     m_isConnecting = false;
     if (m_controller) {
         m_controller->disconnect(this);
-        if (m_controller->state() != QLowEnergyController::UnconnectedState) {
-            m_controller->disconnectFromDevice();
-        }
-        // deleteLater after the event loop has processed any pending signals.
+        // On macOS, disconnectFromDevice() can block the main thread if the
+        // peripheral disappeared uncleanly. Delete the controller directly and
+        // let Qt/CoreBluetooth clean up asynchronously.
         auto *oldController = m_controller;
         m_controller = nullptr;
         oldController->deleteLater();
@@ -208,9 +212,20 @@ void BluetoothManager::cleanupController()
     }
 }
 
+void BluetoothManager::cleanupControllerAsync()
+{
+    if (!m_controller && !m_service) {
+        return;
+    }
+    // Defer the actual cleanup so any in-flight signals are delivered before
+    // the controller is destroyed. A short timeout guarantees we don't wait
+    // forever if CoreBluetooth is stuck.
+    m_cleanupTimer->start(250);
+}
+
 void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
 {
-    cleanupController();
+    cleanupControllerAsync();
 
     m_controller = QLowEnergyController::createCentral(device, this);
 
@@ -226,17 +241,17 @@ void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
             [this](QLowEnergyController::Error error) {
         qDebug() << "BLE Controller error:" << error << "-" << m_controller->errorString();
         
-        bool transientError = (error == QLowEnergyController::ConnectionError || 
+        bool transientError = (error == QLowEnergyController::ConnectionError ||
                                error == QLowEnergyController::UnknownError);
-        
+
         if (m_isConnecting && transientError && m_retryCount < m_maxRetries) {
             m_retryCount++;
             int delay = 1000 * m_retryCount; // Exponential-ish backoff
             qDebug() << "Attempting retry" << m_retryCount << "of" << m_maxRetries << "in" << delay << "ms";
-            
+
             m_isConnecting = false;
             m_connectTimer->stop();
-            
+
             QTimer::singleShot(delay, [this]() {
                 if (m_targetDevice.isValid() && !m_isConnected) {
                     connectToDevice(m_targetDevice);
@@ -247,7 +262,7 @@ void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
 
         m_isConnected = false;
         m_retryCount = 0;
-        cleanupController();
+        cleanupControllerAsync();
         emit disconnected();
     });
     
@@ -282,7 +297,7 @@ void BluetoothManager::onControllerDisconnected()
     qDebug() << "BLE Controller disconnected. RSSI:" << m_targetDevice.rssi();
     m_isConnected = false;
     m_retryCount = 0;
-    cleanupController();
+    cleanupControllerAsync();
     emit disconnected();
     
     // If it was an active connection that dropped, try to reconnect or scan

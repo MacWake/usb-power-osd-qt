@@ -319,17 +319,18 @@ void MainWindow::positionWidgets() {
     // power ~ 1/4, energy ~ 1/4 (centered between the other two),
     // min/max current ~ 1/2 of the available width.
     const int secondRowWidth = windowWidth - 2 * margin;
+    const int colGap = 8;
     const int powerWidth = secondRowWidth / 4;
     const int energyWidth = secondRowWidth / 4;
-    const int minmaxWidth = secondRowWidth - powerWidth - energyWidth;
+    const int minmaxWidth = secondRowWidth - powerWidth - energyWidth - 2 * colGap;
 
     lblPower->move(margin, secondRowY);
     lblPower->resize(powerWidth, smallHeight);
 
-    lblEnergy->move(margin + powerWidth, secondRowY);
+    lblEnergy->move(margin + powerWidth + colGap, secondRowY);
     lblEnergy->resize(energyWidth, smallHeight);
 
-    lblMinMaxCurrent->move(margin + powerWidth + energyWidth, secondRowY);
+    lblMinMaxCurrent->move(margin + powerWidth + energyWidth + 2 * colGap, secondRowY);
     lblMinMaxCurrent->resize(minmaxWidth, smallHeight);
 
     // Position CurrentGraph widget at the bottom
@@ -429,7 +430,9 @@ void MainWindow::updateLabels() {
 
     lblVoltage->setText(QString("%1V").arg(maxVoltage, 0, 'f', 2));
     lblCurrent->setText(QString("%1A").arg(maxCurrent, 0, 'f', 4));
-    lblPower->setText(QString("%1W").arg(maxPower, 0, 'f', 3));
+    // Fixed-width format: up to 3 integer digits + 2 decimals (e.g. " 100.00W")
+    // so the label width stays constant around the 100 W transition.
+    lblPower->setText(QString("%1W").arg(maxPower, 6, 'f', 2, ' '));
     lblEnergy->setText(QString("%1Wh").arg(lastFrame.energyWh, 0, 'f', 3));
     lblMinMaxCurrent->setText(QString("%1-%2A")
         .arg(totalMinCurrent, 0, 'f', 3)
