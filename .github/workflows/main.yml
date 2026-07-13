@@ -202,10 +202,15 @@ jobs:
         run: |
           $wixInstallDir = "C:\Program Files (x86)\WiX Toolset v3.11"
           $wixBinDir = Join-Path $wixInstallDir "bin"
-          $candle = Join-Path $wixBinDir "candle.exe"
-          $light = Join-Path $wixBinDir "light.exe"
+          $candidates = @(
+            (Join-Path $wixBinDir "candle.exe"),
+            (Join-Path $wixInstallDir "candle.exe")
+          )
 
-          if ((Test-Path $candle) -and (Test-Path $light)) {
+          $candle = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($candle) {
+            $wixBinDir = Split-Path -Parent $candle
+            $light = Join-Path $wixBinDir "light.exe"
             Write-Host "WiX 3.11 already present at $wixBinDir"
           } else {
             Write-Host "Downloading WiX 3.11.2 binaries..."
@@ -213,13 +218,24 @@ jobs:
             Invoke-WebRequest -Uri https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip -OutFile $zip
             New-Item -ItemType Directory -Force -Path $wixInstallDir | Out-Null
             Expand-Archive -Path $zip -DestinationPath $wixInstallDir -Force
-            if (-not (Test-Path $candle) -or -not (Test-Path $light)) {
-              throw "WiX 3.11 tools not found after extraction"
+
+            $candle = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if (-not $candle) {
+              Write-Host "Archive contents after extraction:"
+              Get-ChildItem -Path $wixInstallDir -Recurse -File | Select-Object -First 30 | ForEach-Object { Write-Host $_.FullName }
+              throw "WiX 3.11 tools (candle.exe/light.exe) not found after extraction"
             }
+            $wixBinDir = Split-Path -Parent $candle
+            $light = Join-Path $wixBinDir "light.exe"
+          }
+
+          if (-not (Test-Path $light)) {
+            throw "light.exe not found alongside candle.exe at $wixBinDir"
           }
 
           # CPack WIX generator uses the WIX environment variable to locate the toolset.
-          echo "WIX=$wixInstallDir" >> $env:GITHUB_ENV
+          # It expects the directory that contains candle.exe and light.exe.
+          echo "WIX=$wixBinDir" >> $env:GITHUB_ENV
           echo "$wixBinDir" >> $env:GITHUB_PATH
 
       - name: Install Qt (Unixoid)
@@ -255,10 +271,12 @@ jobs:
       - name: Install additional Linux dependencies (Fedora)
         if: matrix.name == 'Linux-Fedora'
         run: |
-          # Minimal fedora containers may ship dnf5, dnf, or yum.
-          DNF=$(command -v dnf5 || command -v dnf || command -v yum)
+          # Minimal fedora containers may ship dnf5, dnf, yum, or microdnf.
+          DNF=$(command -v dnf5 || command -v dnf || command -v yum || command -v microdnf)
           if [ -z "$DNF" ]; then
             echo "No supported package manager found in fedora container"
+            echo "PATH=$PATH"
+            ls -la /usr/bin/*dnf* /usr/bin/yum /usr/bin/microdnf 2>/dev/null || true
             exit 1
           fi
           echo "Using package manager: $DNF"
