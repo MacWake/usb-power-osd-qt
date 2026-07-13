@@ -425,22 +425,38 @@ jobs:
           cpack -G RPM
           ls -la *.rpm
 
+      - name: Stage DEB package for upload
+        if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
+        run: |
+          mkdir -p "${{ github.workspace }}/packages"
+          cp "${{ github.workspace }}/build/"*.deb "${{ github.workspace }}/packages/"
+          ls -la "${{ github.workspace }}/packages/"
+
       - name: Upload DEB package
         if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
         uses: actions/upload-artifact@v7
         with:
           name: linux-deb-${{ matrix.distro }}
-          # Use a relative path so upload-artifact works reliably in container jobs.
-          path: build/*.deb
+          # Use a clean directory with only the package; upload-artifact has
+          # repeatedly failed to find the file inside the build/ directory.
+          path: packages/*.deb
           if-no-files-found: error
+
+      - name: Stage RPM package for upload
+        if: matrix.name == 'Linux-Fedora'
+        run: |
+          mkdir -p "${{ github.workspace }}/packages"
+          cp "${{ github.workspace }}/build/"*.rpm "${{ github.workspace }}/packages/"
+          ls -la "${{ github.workspace }}/packages/"
 
       - name: Upload RPM package
         if: matrix.name == 'Linux-Fedora'
         uses: actions/upload-artifact@v7
         with:
           name: linux-rpm-${{ matrix.distro }}
-          # Use a relative path so upload-artifact works reliably in container jobs.
-          path: build/*.rpm
+          # Use a clean directory with only the package; upload-artifact has
+          # repeatedly failed to find the file inside the build/ directory.
+          path: packages/*.rpm
           if-no-files-found: error
 
       - name: Create zip archive (Windows)
