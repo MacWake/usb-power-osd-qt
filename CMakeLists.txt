@@ -335,7 +335,12 @@ if (WIN32)
     set(CPACK_WIX_UPGRADE_GUID "12345678-90AB-CDEF-1234-567890ABCDEF")
     set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD" "USB Power OSD")
     set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
-    
+
+    # The WiX 3.11 binary zip does not include darice.cub, which is required
+    # for MSI validation. Skip ICE validation so packaging works with the
+    # minimal binary distribution.
+    set(CPACK_WIX_LIGHT_EXTRA_FLAGS "-sval")
+
     # Configure WiX to use the executable's icon for shortcuts
     set(CPACK_WIX_PRODUCT_ICON "${CMAKE_CURRENT_SOURCE_DIR}/usbpower.ico")
     set(CPACK_WIX_UI_BANNER "${CMAKE_CURRENT_SOURCE_DIR}/usbpower.ico")
