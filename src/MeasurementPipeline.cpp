@@ -24,6 +24,11 @@ qint64 MeasurementPipeline::frameIntervalMs() const {
   return static_cast<qint64>(std::round(1000.0 / m_frameRate.load()));
 }
 
+qint64 MeasurementPipeline::pixelsPerSecondToIntervalMs(double pixelsPerSecond) {
+  const double fps = std::max(pixelsPerSecond, 0.1);
+  return static_cast<qint64>(std::round(1000.0 / fps));
+}
+
 qint64 MeasurementPipeline::bucketTimestampFor(qint64 sampleTimestampMs) const {
   const qint64 interval = frameIntervalMs();
   if (interval <= 0) {

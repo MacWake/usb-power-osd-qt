@@ -1,5 +1,7 @@
 #include "GraphCache.h"
 
+#include "MeasurementPipeline.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -36,7 +38,8 @@ void GraphCache::setParams(bool logScale, double pixelsPerSecond, bool isLive) {
 }
 
 double GraphCache::unitMs() const {
-  return 1000.0 / std::max(m_pixelsPerSecond, 0.1);
+  return static_cast<double>(
+      MeasurementPipeline::pixelsPerSecondToIntervalMs(m_pixelsPerSecond));
 }
 
 void GraphCache::invalidateEntry(Entry &entry) { entry.voltage = -1.0; }
@@ -59,7 +62,9 @@ int GraphCache::pixelIndexLinear(qint64 timestampMs, qint64 viewRightMs) const {
 // leftmost segment.
 double GraphCache::steppedAgeForPixel(int idx, int width,
                                        double pixelsPerSecond) {
-  const double unit = 1.0 / std::max(pixelsPerSecond, 0.1);
+  const qint64 intervalMs =
+      MeasurementPipeline::pixelsPerSecondToIntervalMs(pixelsPerSecond);
+  const double unit = static_cast<double>(intervalMs) / 1000.0;
   const int baseSegSize = width / 6;
   const int leftover = width - 6 * baseSegSize;
 

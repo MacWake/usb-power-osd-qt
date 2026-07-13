@@ -76,6 +76,7 @@ private:
     mutable QMutex m_stateMutex;
     bool m_isConnected = false;
     bool m_isConnecting = false;
+    bool m_controllerConnected = false; // true once QLowEnergyController emits connected()
     int m_retryCount = 0;
     const int m_maxRetries = 3;
     
