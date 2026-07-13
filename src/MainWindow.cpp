@@ -46,6 +46,8 @@ MainWindow::MainWindow(OsdSettings *settings,
             &MainWindow::onDeviceConnected);
     connect(m_deviceManager, &DeviceManager::deviceDisconnected, this,
             &MainWindow::onDeviceDisconnected);
+    connect(m_deviceManager, &DeviceManager::btDiscoveryStatusChanged, this,
+            &MainWindow::onBtDiscoveryStatusChanged);
 
     // Setup timers
     m_updateTimer->setInterval(33); // 30 fps fixed render loop
@@ -399,6 +401,15 @@ void MainWindow::onDeviceDisconnected() {
     updateUINoData();
 }
 
+void MainWindow::onBtDiscoveryStatusChanged(const QString &message) {
+    if (message.isEmpty()) {
+        statusBar()->setVisible(false);
+        return;
+    }
+    statusBar()->setVisible(true);
+    statusBar()->showMessage(message);
+}
+
 void MainWindow::showSettings() {
   m_settingsdialog->show();
   m_pipeline->setMinCurrentThreshold(settings->min_current);
@@ -632,6 +643,7 @@ void MainWindow::showUserManual() {
 void MainWindow::toggleGraphLogScale() {
     settings->graph_log_scale = !settings->graph_log_scale;
     settings->saveSettings();
+    m_currentGraph->invalidateCache();
     m_currentGraph->update();
 }
 

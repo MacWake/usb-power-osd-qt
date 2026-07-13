@@ -56,7 +56,11 @@ BluetoothManager::BluetoothManager(QObject *parent)
     m_connectTimer->setInterval(15000); // 15 seconds
     connect(m_connectTimer, &QTimer::timeout, [this] {
         qDebug() << "BLE connection timed out, aborting";
-        m_isConnecting = false;
+        {
+            QMutexLocker lock(&m_stateMutex);
+            m_isConnecting = false;
+            m_isConnected = false;
+        }
         cleanupControllerAsync();
         emit disconnected();
         // Delay rescan so BlueZ can finish processing the disconnect/cancel
@@ -90,8 +94,12 @@ BluetoothManager::~BluetoothManager()
 
 void BluetoothManager::startScanning()
 {
-    if (m_discoveryAgent->isActive()) {
-        return;
+    {
+        QMutexLocker lock(&m_stateMutex);
+        if (m_discoveryAgent->isActive() || m_isConnected || m_isConnecting) {
+            return;
+        }
+        m_isActive = true;
     }
 
     auto supportedDiscoveryMethods = QBluetoothDeviceDiscoveryAgent::supportedDiscoveryMethods();
@@ -100,11 +108,11 @@ void BluetoothManager::startScanning()
         qWarning() << "CRITICAL: This Bluetooth adapter DOES NOT support Low Energy (BLE) discovery!";
     }
 
-    m_isActive = true;
     qDebug() << "Starting Bluetooth scan (All methods)...";
+    emit discoveryStatusChanged(tr("Scanning for Bluetooth devices..."));
     m_discoveryAgent->setLowEnergyDiscoveryTimeout(10000);
     m_discoveryAgent->start();
-    
+
     if (!m_scanTimer->isActive()) {
         m_scanTimer->start();
     }
@@ -113,36 +121,45 @@ void BluetoothManager::startScanning()
 void BluetoothManager::stopScanning()
 {
     qDebug() << "Stopping Bluetooth scan...";
-    m_isActive = false;
+    {
+        QMutexLocker lock(&m_stateMutex);
+        m_isActive = false;
+    }
     m_scanTimer->stop();
     if (m_discoveryAgent->isActive()) {
         m_discoveryAgent->stop();
     }
+    emit discoveryStatusChanged(QString{});
 }
 
 void BluetoothManager::disconnect()
 {
     stopScanning();
-    if (m_controller) {
-        qDebug() << "Disconnecting from BLE device...";
-        // Avoid blocking the main thread; the actual cleanup is deferred.
-        cleanupControllerAsync();
+    {
+        QMutexLocker lock(&m_stateMutex);
+        if (m_controller) {
+            qDebug() << "Disconnecting from BLE device...";
+            // Avoid blocking the main thread; the actual cleanup is deferred.
+            cleanupControllerAsync();
+        }
+        m_targetDevice = QBluetoothDeviceInfo();
+        m_isConnected = false;
+        m_isActive = false;
     }
-    m_targetDevice = QBluetoothDeviceInfo();
-    m_isConnected = false;
-    m_isActive = false;
+    emit discoveryStatusChanged(QString{});
 }
 
 void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
 {
     // Look for devices with "USB Power" or your specific device name
-    QString deviceName = info.name();
-    QList<QBluetoothUuid> serviceUuids = info.serviceUuids();
+    const QString deviceName = info.name();
+    const QList<QBluetoothUuid> serviceUuids = info.serviceUuids();
 
+    const QString address = info.address().toString();
     qDebug() << "Found device:" << (deviceName.isEmpty() ? "<no name>" : deviceName)
-             << "[" << info.address().toString() << "]"
+             << "[" << address << "]"
              << "RSSI:" << info.rssi();
-    
+
     // Check if it matches our target name
     bool isTarget = deviceName.contains("MacWake-USBPowerMeter", Qt::CaseInsensitive) ||
                     deviceName.contains("MacWake PowerMeter", Qt::CaseInsensitive) ||
@@ -151,7 +168,7 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
                     deviceName.contains("PowerMeter", Qt::CaseInsensitive) ||
                     deviceName.contains("USB-Power", Qt::CaseInsensitive) ||
                     deviceName.contains("USBPower", Qt::CaseInsensitive);
-    
+
     // Also check if it advertises our target service UUID
     if (!isTarget) {
         for (const auto& uuid : serviceUuids) {
@@ -164,21 +181,40 @@ void BluetoothManager::onDeviceDiscovered(const QBluetoothDeviceInfo &info)
         }
     }
 
-    if (isTarget) {
+    if (!isTarget) {
+        return;
+    }
+
+    {
+        QMutexLocker lock(&m_stateMutex);
         if (!this->m_isActive) {
             qDebug() << "Ignoring found target device - not active";
             return;
         }
-        if (m_isConnecting || m_isConnected) {
-            qDebug() << "Ignoring found target device - already connecting/connected";
-            return;
-        }
-        qDebug() << "Target device identified:" << (deviceName.isEmpty() ? "<no name>" : deviceName)
-                 << "[" << info.address().toString() << "]";
-        m_targetDevice = info;
-        m_discoveryAgent->stop();
-        connectToDevice(info);
     }
+
+    QMutexLocker lock(&m_stateMutex);
+
+    if (m_isConnecting || m_isConnected) {
+        qDebug() << "Ignoring found target device - already connecting/connected";
+        return;
+    }
+
+    // Stop discovery before opening a connection. Leaving the agent running on
+    // some platforms (macOS) can cause the controller to hang while trying to
+    // resolve the device at the same time the discovery agent owns the adapter.
+    if (m_discoveryAgent->isActive()) {
+        m_discoveryAgent->stop();
+    }
+
+    const QString displayName = deviceName.isEmpty() ? tr("<no name>") : deviceName;
+    qDebug() << "Target device identified:" << displayName
+             << "[" << address << "]";
+    emit discoveryStatusChanged(
+        tr("Found: %1 [%2]").arg(displayName, address));
+    m_targetDevice = info;
+    lock.unlock();
+    connectToDevice(info);
 }
 
 void BluetoothManager::onScanFinished()
@@ -186,7 +222,13 @@ void BluetoothManager::onScanFinished()
     qDebug() << "Bluetooth scan finished";
     if (!m_isConnected && !m_controller && m_targetDevice.isValid()) {
         qDebug() << "Connecting to target device " << m_targetDevice.name();
+        emit discoveryStatusChanged(tr("Connecting to %1...")
+                                         .arg(m_targetDevice.name().isEmpty()
+                                                  ? tr("<no name>")
+                                                  : m_targetDevice.name()));
         connectToDevice(m_targetDevice);
+    } else if (!m_isConnected && !m_isConnecting) {
+        emit discoveryStatusChanged(tr("No Bluetooth device found"));
     }
 }
 
@@ -194,7 +236,10 @@ void BluetoothManager::cleanupController()
 {
     m_connectTimer->stop();
     m_cleanupTimer->stop();
-    m_isConnecting = false;
+    {
+        QMutexLocker lock(&m_stateMutex);
+        m_isConnecting = false;
+    }
     if (m_controller) {
         m_controller->disconnect(this);
         // On macOS, disconnectFromDevice() can block the main thread if the
@@ -225,7 +270,16 @@ void BluetoothManager::cleanupControllerAsync()
 
 void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
 {
-    cleanupControllerAsync();
+    {
+        QMutexLocker lock(&m_stateMutex);
+        cleanupController();
+        m_isConnecting = true;
+        m_isConnected = false;
+        m_retryCount = 0;
+    }
+
+    const QString displayName = device.name().isEmpty() ? tr("<no name>") : device.name();
+    emit discoveryStatusChanged(tr("Connecting to %1...").arg(displayName));
 
     m_controller = QLowEnergyController::createCentral(device, this);
 
@@ -253,20 +307,25 @@ void BluetoothManager::connectToDevice(const QBluetoothDeviceInfo &device)
             m_connectTimer->stop();
 
             QTimer::singleShot(delay, [this]() {
-                if (m_targetDevice.isValid() && !m_isConnected) {
+                QMutexLocker lock(&m_stateMutex);
+                if (m_targetDevice.isValid() && !m_isConnected && !m_isConnecting) {
+                    lock.unlock();
                     connectToDevice(m_targetDevice);
                 }
             });
             return;
         }
 
-        m_isConnected = false;
-        m_retryCount = 0;
+        {
+            QMutexLocker lock(&m_stateMutex);
+            m_isConnected = false;
+            m_isConnecting = false;
+            m_retryCount = 0;
+        }
         cleanupControllerAsync();
         emit disconnected();
     });
-    
-    m_isConnecting = true;
+
     m_connectTimer->start();
     qDebug() << "Connecting to device:" << device.name();
     m_controller->connectToDevice();
@@ -287,23 +346,33 @@ void BluetoothManager::onControllerConnected()
 {
     qDebug() << "BLE Controller connected";
     m_connectTimer->stop();
-    m_isConnecting = false;
-    m_retryCount = 0;
+    {
+        QMutexLocker lock(&m_stateMutex);
+        m_isConnecting = false;
+        m_retryCount = 0;
+    }
     m_controller->discoverServices();
 }
 
 void BluetoothManager::onControllerDisconnected()
 {
     qDebug() << "BLE Controller disconnected. RSSI:" << m_targetDevice.rssi();
-    m_isConnected = false;
-    m_retryCount = 0;
+    {
+        QMutexLocker lock(&m_stateMutex);
+        m_isConnected = false;
+        m_isConnecting = false;
+        m_retryCount = 0;
+    }
     cleanupControllerAsync();
     emit disconnected();
-    
+
     // If it was an active connection that dropped, try to reconnect or scan
-    if (m_isActive) {
-        qDebug() << "Unexpected disconnect while active, starting scan to reconnect...";
-        QTimer::singleShot(2000, this, &BluetoothManager::startScanning);
+    {
+        QMutexLocker lock(&m_stateMutex);
+        if (m_isActive) {
+            qDebug() << "Unexpected disconnect while active, starting scan to reconnect...";
+            QTimer::singleShot(2000, this, &BluetoothManager::startScanning);
+        }
     }
 }
 
@@ -403,9 +472,13 @@ void BluetoothManager::setupService()
         qDebug() << "Characteristic doesn't support notifications or indications";
     }
     
-    m_isConnected = true;
+    {
+        QMutexLocker lock(&m_stateMutex);
+        m_isConnected = true;
+        m_isConnecting = false;
+    }
     emit connected(m_targetDevice.name());
-    
+
     qDebug() << "BLE service setup complete";
 }
 

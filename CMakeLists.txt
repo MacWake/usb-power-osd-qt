@@ -56,17 +56,33 @@ set(TEST_SOURCES
         tests/test_serial_pld_protocol.h
         tests/test_measurement_pipeline.cpp
         tests/test_measurement_pipeline.h
+        tests/test_graph_mapping.cpp
+        tests/test_graph_mapping.h
+        tests/test_graph_cache.cpp
+        tests/test_graph_cache.h
+        tests/test_serial_to_graph.cpp
+        tests/test_serial_to_graph.h
 )
 
 set(TEST_LIB_SOURCES
         src/BluetoothManager.cpp
         src/BluetoothManager.h
+        src/CurrentGraph.cpp
+        src/CurrentGraph.h
+        src/GraphCache.cpp
+        src/GraphCache.h
         src/MeasurementPipeline.cpp
         src/MeasurementPipeline.h
+        src/OsdSettings.cpp
+        src/OsdSettings.h
+        src/PLDAdapter.cpp
+        src/PLDAdapter.h
         src/PowerDelivery.cpp
         src/PowerDelivery.h
         src/PowerMonitor.cpp
         src/PowerMonitor.h
+        src/SerialAdapter.cpp
+        src/SerialAdapter.h
         src/SerialManager.cpp
         src/SerialManager.h
         src/PowerData.h
@@ -78,8 +94,10 @@ enable_testing()
 add_executable(usb-power-osd-tests ${TEST_SOURCES} ${TEST_LIB_SOURCES})
 target_link_libraries(usb-power-osd-tests PRIVATE
         Qt6::Core
+        Qt6::Widgets
         Qt6::Bluetooth
         Qt6::SerialPort
+        Qt6::Multimedia
         Qt6::Test
 )
 target_include_directories(usb-power-osd-tests PRIVATE src)
@@ -114,13 +132,16 @@ set(SOURCES
         src/CurrentGraph.cpp
         src/DeviceManager.cpp
         src/DeviceSelectionDialog.cpp
+        src/GraphCache.cpp
         src/Main.cpp
         src/MainWindow.cpp
         src/MeasurementHistory.cpp
         src/MeasurementPipeline.cpp
         src/OsdSettings.cpp
+        src/PLDAdapter.cpp
         src/PowerDelivery.cpp
         src/PowerMonitor.cpp
+        src/SerialAdapter.cpp
         src/SerialManager.cpp
         src/SettingsDialog.cpp
         src/AboutDialog.cpp

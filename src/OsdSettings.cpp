@@ -30,7 +30,7 @@ void OsdSettings::init() {
     window_left = 0;
     min_current = 0;
     current_diff_ma = 0;
-    graph_pixels_per_second = 4.0;
+    graph_pixels_per_second = 30.0;
     label_sample_window = 3;
     primary_font_size = static_cast<int>(static_cast<double>(24) * scale);
     secondary_font_size = static_cast<int>(static_cast<double>(18) * scale);
