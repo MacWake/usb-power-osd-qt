@@ -345,7 +345,7 @@ jobs:
       - name: Configure CMake (non-Windows)
         if: matrix.name != 'Windows'
         run: >
-          cmake -B ${{github.workspace}}/build
+          cmake -B build
           -G "${{matrix.generator}}"
           -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
           -DCMAKE_PREFIX_PATH=${{env.Qt6_DIR}}
@@ -356,81 +356,81 @@ jobs:
           ${{ matrix.name == 'macOS' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+        run: cmake --build build --config ${{matrix.build_type}}
 
       - name: Debug build output (Unixoid)
         if: matrix.name != 'Windows'
         run: |
           echo "Listing build directory contents:"
-          ls -lRa ${{github.workspace}}/build/
+          ls -lRa build/
 
       - name: Debug build output (Windows)
         if: matrix.name == 'Windows'
         run: |
           echo "Listing build directory contents:"
-          dir -s ${{github.workspace}}/build/
+          dir -s build/
 
       # Linux deployment - bundle Qt libraries
       - name: Deploy Qt libraries (Linux)
         if: startsWith(matrix.name, 'Linux')
         run: |
           # Create deployment directory
-          mkdir -p ${{github.workspace}}/deploy/linux
-          
+          mkdir -p deploy/linux
+
           # Copy the executable
-          cp "${{github.workspace}}/build/USB-Power-OSD" "${{github.workspace}}/deploy/linux/"
-          
+          cp "build/USB-Power-OSD" "deploy/linux/"
+
           # Copy Qt libraries
-          mkdir -p ${{github.workspace}}/deploy/linux/lib
-          
+          mkdir -p deploy/linux/lib
+
           # Find and copy Qt libraries that the executable depends on
-          ldd "${{github.workspace}}/deploy/linux/USB-Power-OSD" 2>/dev/null | grep -i qt6 | awk '{print $3}' | while read lib; do
+          ldd "deploy/linux/USB-Power-OSD" 2>/dev/null | grep -i qt6 | awk '{print $3}' | while read lib; do
             if [ -f "$lib" ]; then
-              cp "$lib" "${{github.workspace}}/deploy/linux/lib/"
+              cp "$lib" "deploy/linux/lib/"
             fi
           done
-          
+
           # Copy platform plugins
-          mkdir -p ${{github.workspace}}/deploy/linux/plugins/platforms
+          mkdir -p deploy/linux/plugins/platforms
           if [ -d "${{env.Qt6_DIR}}/../plugins/platforms" ]; then
-            cp -r "${{env.Qt6_DIR}}/../plugins/platforms"/* "${{github.workspace}}/deploy/linux/plugins/platforms/"
+            cp -r "${{env.Qt6_DIR}}/../plugins/platforms"/* "deploy/linux/plugins/platforms/"
           fi
-          
+
           # Create a launcher script that sets up the library path
-          cat > "${{github.workspace}}/deploy/linux/usb-power-osd.sh" << 'EOF'
+          cat > "deploy/linux/usb-power-osd.sh" << 'EOF'
           #!/bin/bash
           SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
           export LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"
           export QT_PLUGIN_PATH="$SCRIPT_DIR/plugins"
           exec "$SCRIPT_DIR/USB-Power-OSD" "$@"
           EOF
-          
-          chmod +x "${{github.workspace}}/deploy/linux/usb-power-osd.sh"
-          
+
+          chmod +x "deploy/linux/usb-power-osd.sh"
+
           # Create a simple tar.gz archive
-          cd ${{github.workspace}}/deploy
+          cd deploy
           tar -czf ../USB-Power-OSD-Linux-${{ steps.release_version.outputs.version }}-${{ matrix.distro }}.tar.gz linux/
 
       - name: Create DEB package (Debian/Ubuntu)
         if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
         run: |
-          cd ${{github.workspace}}/build
+          cd build
           cpack -G DEB
           ls -la *.deb
 
       - name: Create RPM package (Fedora)
         if: matrix.name == 'Linux-Fedora'
         run: |
-          cd ${{github.workspace}}/build
+          cd build
           cpack -G RPM
           ls -la *.rpm
 
       - name: Stage DEB package for upload
         if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
         run: |
-          mkdir -p "${{ github.workspace }}/packages"
-          cp "${{ github.workspace }}/build/"*.deb "${{ github.workspace }}/packages/"
-          ls -la "${{ github.workspace }}/packages/"
+          mkdir -p packages
+          cp build/*.deb packages/
+          ls -la packages/
 
       - name: Upload DEB package
         if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
@@ -445,9 +445,9 @@ jobs:
       - name: Stage RPM package for upload
         if: matrix.name == 'Linux-Fedora'
         run: |
-          mkdir -p "${{ github.workspace }}/packages"
-          cp "${{ github.workspace }}/build/"*.rpm "${{ github.workspace }}/packages/"
-          ls -la "${{ github.workspace }}/packages/"
+          mkdir -p packages
+          cp build/*.rpm packages/
+          ls -la packages/
 
       - name: Upload RPM package
         if: matrix.name == 'Linux-Fedora'
@@ -463,15 +463,15 @@ jobs:
         if: matrix.name == 'Windows'
         run: |
           # Create deployment directory
-          mkdir -p ${{github.workspace}}\deploy\windows
-          copy "${{github.workspace}}\build\Release\USB-Power-OSD.exe" "${{github.workspace}}\deploy\windows"
-          windeployqt --release --no-translations --dir "${{github.workspace}}\deploy\windows" "${{github.workspace}}\deploy\windows\USB-Power-OSD.exe"
-          
+          mkdir -p deploy\windows
+          copy "build\Release\USB-Power-OSD.exe" "deploy\windows"
+          windeployqt --release --no-translations --dir "deploy\windows" "deploy\windows\USB-Power-OSD.exe"
+
           # Also deploy directly to the build directory for CPack
-          windeployqt --release --no-translations --dir "${{github.workspace}}\build\Release" "${{github.workspace}}\build\Release\USB-Power-OSD.exe"
-          
+          windeployqt --release --no-translations --dir "build\Release" "build\Release\USB-Power-OSD.exe"
+
           # Create a zip archive
-          cd ${{github.workspace}}\deploy
+          cd deploy
           powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows-${{ steps.release_version.outputs.version }}.zip"
 
       - name: Upload Windows artifacts
@@ -479,7 +479,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: windows-zip
-          path: ${{github.workspace}}/USB-Power-OSD-Windows-${{ steps.release_version.outputs.version }}.zip
+          path: USB-Power-OSD-Windows-${{ steps.release_version.outputs.version }}.zip
           if-no-files-found: error
 
       - name: Create MSI with CPack
@@ -494,13 +494,13 @@ jobs:
         if: matrix.name == 'Windows' && failure()
         shell: pwsh
         run: |
-          $wixLog = "${{github.workspace}}/build/_CPack_Packages/win64/WIX/wix.log"
+          $wixLog = "build/_CPack_Packages/win64/WIX/wix.log"
           if (Test-Path $wixLog) {
             Write-Host "=== $wixLog ==="
             Get-Content $wixLog -Raw | Write-Host
           } else {
             Write-Host "No wix.log found at $wixLog"
-            Get-ChildItem -Path "${{github.workspace}}/build/_CPack_Packages" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 20 | ForEach-Object { Write-Host $_.FullName }
+            Get-ChildItem -Path "build/_CPack_Packages" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 20 | ForEach-Object { Write-Host $_.FullName }
           }
 
       - name: Find MSI file
@@ -547,30 +547,30 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: linux-build-${{ matrix.distro }}
-          path: ${{github.workspace}}/USB-Power-OSD-Linux-${{ steps.release_version.outputs.version }}-${{ matrix.distro }}.tar.gz
+          path: USB-Power-OSD-Linux-${{ steps.release_version.outputs.version }}-${{ matrix.distro }}.tar.gz
           if-no-files-found: error
 
       - name: Deploy Qt libraries (macOS)
         if: matrix.name == 'macOS'
         run: |
           # Use macdeployqt to bundle Qt libraries into the app
-          macdeployqt "${{github.workspace}}/build/USB-Power-OSD.app" -verbose=1
-          
+          macdeployqt "build/USB-Power-OSD.app" -verbose=1
+
           # Verify the app structure after deployment
           echo "App structure after macdeployqt:"
-          ls -la "${{github.workspace}}/build/USB-Power-OSD.app/Contents/"
+          ls -la "build/USB-Power-OSD.app/Contents/"
 
       - name: Sign the macOS application
         if: matrix.name == 'macOS'
         run: |
           echo "Signing with Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
           echo "Signing app bundle..."
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --deep --verbose "${{github.workspace}}/build/USB-Power-OSD.app"
-          
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --deep --verbose "build/USB-Power-OSD.app"
+
           # Verify the signature
           echo "Verifying signature..."
-          /usr/bin/codesign --verify --deep --strict --verbose=2 "${{github.workspace}}/build/USB-Power-OSD.app"
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB-Power-OSD.app"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "build/USB-Power-OSD.app"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "build/USB-Power-OSD.app"
 
       - name: Create ZIP archive (macOS)
         if: matrix.name == 'macOS'
@@ -579,24 +579,24 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
         run: |
           # Create a ZIP archive of the app
-          ditto -c -k --keepParent "${{github.workspace}}/build/USB-Power-OSD.app" "${{github.workspace}}/build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip"
+          ditto -c -k --keepParent "build/USB-Power-OSD.app" "build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip"
 
           # Notarize the app via ZIP
-          xcrun notarytool submit "${{github.workspace}}/build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip" \
+          xcrun notarytool submit "build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_ID_PASSWORD" \
             --team-id "${{ vars.APPLE_TEAM_ID }}" \
             --wait
-          
+
           # Staple the notarization ticket
-          xcrun stapler staple "${{github.workspace}}/build/USB-Power-OSD.app"
+          xcrun stapler staple "build/USB-Power-OSD.app"
 
       - name: Upload macOS zip
         if: matrix.name == 'macOS'
         uses: actions/upload-artifact@v7
         with:
           name: macos-zip
-          path: ${{github.workspace}}/build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip
+          path: build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip
           if-no-files-found: error
 
       # Create dmg
