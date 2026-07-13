@@ -1,4 +1,4 @@
-// CustomCanvas.cpp
+// CurrentGraph.cpp
 #include "CurrentGraph.h"
 
 #include "OsdSettings.h"
@@ -12,12 +12,64 @@
 #include <QWheelEvent>
 #include <cmath>
 
+namespace {
+
+// Maps a horizontal pixel index (0 = right/newest, w-1 = left/oldest) to a
+// time offset in seconds from the right edge for the stepped "log-like" view.
+// The newest 2/6 (1/3) uses linear resolution. The remaining 4/6 are divided
+// into four segments, each with half the resolution of the one before it:
+// 1x, 2x, 4x, 8x, 16x. Leftover pixels from integer division are added to the
+// leftmost segment.
+double steppedAgeForPixel(int idx, int w, double pixelsPerSecond) {
+  const double unit = 1.0 / std::max(pixelsPerSecond, 0.1);
+  const int baseSegSize = w / 6;
+  const int leftover = w - 6 * baseSegSize;
+
+  const int segSizes[5] = {
+      2 * baseSegSize,
+      baseSegSize,
+      baseSegSize,
+      baseSegSize,
+      baseSegSize + leftover,
+  };
+  const double multipliers[5] = {1.0, 2.0, 4.0, 8.0, 16.0};
+
+  double age = 0.0;
+  int consumed = 0;
+  for (int seg = 0; seg < 5; ++seg) {
+    const int segEnd = consumed + segSizes[seg];
+    if (idx <= segEnd) {
+      return age + (idx - consumed) * multipliers[seg] * unit;
+    }
+    age += segSizes[seg] * multipliers[seg] * unit;
+    consumed = segEnd;
+  }
+  return age;
+}
+
+} // namespace
+
 CurrentGraph::CurrentGraph(QWidget *parent, MeasurementPipeline *pipeline,
                            OsdSettings *settings)
     : QWidget(parent), pipeline(pipeline), settings(settings) {
   setMinimumSize(200, 150);
   setAttribute(Qt::WA_OpaquePaintEvent); // optional perf hint
   setFocusPolicy(Qt::StrongFocus);
+  m_cache.setSize(width());
+  m_cache.setParams(settings->graph_log_scale,
+                    settings->graph_pixels_per_second, true);
+}
+
+double CurrentGraph::msPerPixel() const {
+  return 1000.0 / std::max(settings->graph_pixels_per_second, 0.1);
+}
+
+qint64 CurrentGraph::snapRightEdge(qint64 newestTime) const {
+  // Snap the live right edge up to the next pixel-grid boundary so the newest
+  // sample always falls inside the rightmost pixel column.
+  const double unit = msPerPixel();
+  return static_cast<qint64>(
+      std::ceil(static_cast<double>(newestTime) / unit) * unit);
 }
 
 double CurrentGraph::findLowBox(double min_current) {
@@ -38,7 +90,7 @@ double CurrentGraph::findLowBox(double min_current) {
 
 double CurrentGraph::findHighBox(double max_current) {
   if (max_current >= 1.0) {
-    return ceil(max_current*2)/2;
+    return ceil(max_current * 2) / 2;
   }
   if (max_current >= .5) {
     return 1.0;
@@ -62,6 +114,8 @@ void CurrentGraph::setLive() {
   m_isLive = true;
   m_viewAnchorMs = 0;
   m_liveRightEdgeMs = 0;
+  m_cache.setParams(settings->graph_log_scale,
+                    settings->graph_pixels_per_second, true);
   emit reviewModeChanged(false);
   update();
 }
@@ -75,6 +129,8 @@ void CurrentGraph::panView(int directionMs) {
     emit reviewModeChanged(true);
   }
   m_viewAnchorMs += directionMs;
+  // History/review mode is linear per the graph cache spec.
+  m_cache.setParams(false, settings->graph_pixels_per_second, false);
   update();
 }
 
@@ -122,60 +178,29 @@ void CurrentGraph::refresh() {
   update(); // schedules a paintEvent
 }
 
-namespace {
-  // Maps a horizontal pixel index (0 = right/newest, w-1 = left/oldest) to a
-  // time offset in seconds from the right edge for the stepped "log-like" view.
-  // The newest 2/6 (1/3) uses linear resolution. The remaining 4/6 are divided
-  // into four segments, each with half the resolution of the one before it:
-  // 1x, 2x, 4x, 8x, 16x. So the leftmost segment has 16 measurements per pixel.
-  // Leftover pixels from integer division are added to the leftmost segment.
-  double steppedAgeForPixel(int i, int w, double pixelsPerSecond) {
-    const double unit = 1.0 / pixelsPerSecond; // seconds per pixel at full resolution
-    const int baseSegSize = w / 6;
-    const int leftover = w - 6 * baseSegSize;
+void CurrentGraph::invalidateCache() {
+  const bool effectiveLogScale = m_isLive && settings->graph_log_scale;
+  m_cache.setParams(effectiveLogScale, settings->graph_pixels_per_second,
+                    m_isLive);
+}
 
-    const int segSizes[5] = {
-        2 * baseSegSize,
-        baseSegSize,
-        baseSegSize,
-        baseSegSize,
-        baseSegSize + leftover,
-    };
-    const double multipliers[5] = {1.0, 2.0, 4.0, 8.0, 16.0};
-
-    double age = 0.0;
-    int consumed = 0;
-    for (int seg = 0; seg < 5; ++seg) {
-      const int segEnd = consumed + segSizes[seg];
-      if (i <= segEnd) {
-        return age + (i - consumed) * multipliers[seg] * unit;
-      }
-      age += segSizes[seg] * multipliers[seg] * unit;
-      consumed = segEnd;
-    }
-    return age;
-  }
+void CurrentGraph::resizeEvent(QResizeEvent *event) {
+  Q_UNUSED(event);
+  m_cache.setSize(width());
+  invalidateCache();
+  update();
 }
 
 void CurrentGraph::buildPixelMaps(
-    double newestTime, double oldestTime,
-    const std::vector<DisplayFrame> &frames,
+    int w, bool logScale, double pixelsPerSecond, double newestTime,
+    double oldestTime, const std::vector<DisplayFrame> &frames,
     std::vector<double> &currentAtPixel,
-    std::vector<double> &voltageAtPixel) const {
-  const int w = width();
-  const double pixelsPerSecond =
-      std::max(settings->graph_pixels_per_second, 0.1);
-
+    std::vector<double> &voltageAtPixel) {
   currentAtPixel.assign(w, 0.0);
   voltageAtPixel.assign(w, 0.0);
   std::vector<bool> hasPixel(w, false);
 
-  // Convention: currentAtPixel[idx], idx = 0 is the left/oldest edge,
-  // idx = w-1 is the right/newest edge.
-  if (settings->graph_log_scale) {
-    // Stepped "log-like" mapping: newest third at full resolution, then
-    // resolution halves for each segment to the left. For every pixel column
-    // we compute the [tLeft, tRight) window and take the max current/voltage.
+  if (logScale) {
     for (int i = 0; i < w; ++i) {
       const double dtLeft = steppedAgeForPixel(i, w, pixelsPerSecond);
       const double dtRight = steppedAgeForPixel(i + 1, w, pixelsPerSecond);
@@ -195,7 +220,6 @@ void CurrentGraph::buildPixelMaps(
         }
       }
       if (found) {
-        // i is pixels from the right edge; x is the left-edge index.
         const int x = w - 1 - i;
         if (x >= 0 && x < w) {
           currentAtPixel[x] = maxCurrent;
@@ -205,15 +229,14 @@ void CurrentGraph::buildPixelMaps(
       }
     }
   } else {
-    // Linear mapping: one horizontal pixel = 1 / pixelsPerSecond seconds.
-    // Newest data at the right edge (index w-1), oldest at the left (index 0).
+    const double msPx = 1000.0 / std::max(pixelsPerSecond, 0.1);
     for (const auto &frame : frames) {
-      if (frame.timestampMs > newestTime || frame.timestampMs < oldestTime) {
+      const int i = static_cast<int>(
+          std::floor((newestTime - frame.timestampMs) / msPx));
+      if (i < 0 || i >= w) {
         continue;
       }
-      const int x = w - 1 - static_cast<int>(
-                                (newestTime - frame.timestampMs) / 1000.0 *
-                                pixelsPerSecond);
+      const int x = w - 1 - i;
       if (x >= 0 && x < w) {
         currentAtPixel[x] = frame.current;
         voltageAtPixel[x] = frame.voltage;
@@ -222,12 +245,9 @@ void CurrentGraph::buildPixelMaps(
     }
   }
 
-  // Fill small gaps *within* the data span by interpolating neighboring real
-  // samples. Do not extend the trace into the empty left region before enough
-  // history exists; those pixels are left at zero and the graph simply grows
-  // from the right edge as a true strip chart.
-  int firstRealIndex = w; // leftmost pixel with real data
-  int lastRealIndex = -1; // rightmost pixel with real data
+  // Forward-fill small gaps within the data span.
+  int firstRealIndex = w;
+  int lastRealIndex = -1;
   for (int i = 0; i < w; ++i) {
     if (hasPixel[i]) {
       firstRealIndex = std::min(firstRealIndex, i);
@@ -268,34 +288,39 @@ void CurrentGraph::drawGrid(QPainter &p, double minCurrent,
   }
 }
 
-void CurrentGraph::drawGraphLine(QPainter &p,
-                                 const std::vector<double> &currentAtPixel,
-                                 const std::vector<double> &voltageAtPixel,
-                                 double minCurrent, double maxCurrent) {
+void CurrentGraph::drawGraphLine(QPainter &p, double minCurrent,
+                                 double maxCurrent, double pps,
+                                 double actualMaxAgeSeconds) {
   const int graphHeight = height() - 10;
   const int graphTop = 5;
-
-  // Determine rightmost pixel that has real data so we don't draw a flat line
-  // across the whole widget before enough history exists.
-  int rightmostReal = -1;
-  for (int i = currentAtPixel.size() - 1; i >= 0; --i) {
-    if (voltageAtPixel[i] > 0.0 || currentAtPixel[i] > 0.0) {
-      rightmostReal = i;
-      break;
-    }
-  }
-  if (rightmostReal < 0) {
-    return;
-  }
+  const int w = m_cache.size();
+  const auto &entries = m_cache.entries();
+  const bool logScale = m_cache.logScale();
+  const double unitMs = 1000.0 / std::max(pps, 0.1);
 
   QPointF lastPoint;
   bool hasLastPoint = false;
 
-  for (int i = 0; i <= rightmostReal; ++i) {
-    const double current = currentAtPixel[i];
-    const double voltage = voltageAtPixel[i];
+  for (int x = 0; x < w; ++x) {
+    const int cacheIdx = w - 1 - x;
+    const auto &entry = entries[cacheIdx];
+    if (entry.voltage < 0.0) {
+      hasLastPoint = false;
+      continue;
+    }
 
-    auto pdVolts = PowerDelivery::getEnum(voltage);
+    // Don't draw pixels that represent an age beyond the actual data span.
+    // In log mode old pixels are derived from newer data and would otherwise
+    // make it look like history exists before the device started sending data.
+    const double representedAgeSeconds =
+        logScale ? steppedAgeForPixel(cacheIdx, w, pps)
+                 : static_cast<double>(cacheIdx) * unitMs / 1000.0;
+    if (representedAgeSeconds > actualMaxAgeSeconds + 1e-9) {
+      hasLastPoint = false;
+      continue;
+    }
+
+    auto pdVolts = PowerDelivery::getEnum(entry.voltage);
     switch (pdVolts) {
     case PowerDelivery::PD_NONE:
       p.setPen(QPen(QColor(255, 128, 128), 1));
@@ -323,9 +348,8 @@ void CurrentGraph::drawGraphLine(QPainter &p,
       break;
     }
 
-    const int x = i; // left-to-right: oldest on left, newest on right
     const int y = graphTop + static_cast<int>(
-                                (maxCurrent - current) /
+                                (maxCurrent - entry.current) /
                                 (maxCurrent - minCurrent) * graphHeight);
 
     QPointF currentPoint(x, y);
@@ -337,35 +361,51 @@ void CurrentGraph::drawGraphLine(QPainter &p,
   }
 }
 
-void CurrentGraph::drawPeaks(QPainter &p,
-                             const std::vector<double> &currentAtPixel,
-                             double minCurrent, double maxCurrent) {
+void CurrentGraph::drawPeaks(QPainter &p, double minCurrent,
+                             double maxCurrent, double pps,
+                             double actualMaxAgeSeconds) {
   if (!settings->show_graph_peaks) {
     return;
   }
 
-  const int w = currentAtPixel.size();
+  const int w = m_cache.size();
   if (w == 0) {
     return;
   }
+  const auto &entries = m_cache.entries();
+  const bool logScale = m_cache.logScale();
+  const double unitMs = 1000.0 / std::max(pps, 0.1);
 
-  // Find min/max values and the first pixel where each occurs.
   double peakMin = std::numeric_limits<double>::infinity();
   double peakMax = -std::numeric_limits<double>::infinity();
   int xMin = -1;
   int xMax = -1;
-  for (int i = 0; i < w; ++i) {
-    if (currentAtPixel[i] < peakMin) {
-      peakMin = currentAtPixel[i];
-      xMin = i;
+  for (int cacheIdx = 0; cacheIdx < w; ++cacheIdx) {
+    const auto &entry = entries[cacheIdx];
+    if (entry.voltage < 0.0) {
+      continue;
     }
-    if (currentAtPixel[i] > peakMax) {
-      peakMax = currentAtPixel[i];
-      xMax = i;
+
+    const double ageSeconds =
+        logScale ? steppedAgeForPixel(cacheIdx, w, pps)
+                 : static_cast<double>(cacheIdx) * unitMs / 1000.0;
+    if (ageSeconds > actualMaxAgeSeconds + 1e-9) {
+      continue;
+    }
+
+    const int x = w - 1 - cacheIdx;
+    if (entry.current < peakMin) {
+      peakMin = entry.current;
+      xMin = x;
+    }
+    if (entry.current > peakMax) {
+      peakMax = entry.current;
+      xMax = x;
     }
   }
 
-  if (xMin < 0 || xMax < 0 || !std::isfinite(peakMin) || !std::isfinite(peakMax)) {
+  if (xMin < 0 || xMax < 0 || !std::isfinite(peakMin) ||
+      !std::isfinite(peakMax)) {
     return;
   }
 
@@ -385,7 +425,6 @@ void CurrentGraph::drawPeaks(QPainter &p,
   const int yMax = yForCurrent(peakMax);
   const int yMin = yForCurrent(peakMin);
 
-  // Small triangles pointing at the extrema.
   constexpr int triSize = 6;
   QPointF maxTriangle[] = {
       QPointF(xMax, yMax - triSize),
@@ -432,83 +471,89 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
   }
 
   const int w = width();
-  const double pixelsPerSecond = std::max(settings->graph_pixels_per_second, 0.1);
+  const double pixelsPerSecond =
+      std::max(settings->graph_pixels_per_second, 0.1);
 
-  if (!pipeline || pipeline->lastNFrames(1).empty()) {
-    return;
-  }
-
-  const double maxAgeSeconds = settings->graph_log_scale
-                                  ? steppedAgeForPixel(w, w, pixelsPerSecond)
-                                  : static_cast<double>(w) / pixelsPerSecond;
+  const double maxAgeSeconds =
+      settings->graph_log_scale
+          ? steppedAgeForPixel(w, w, pixelsPerSecond)
+          : static_cast<double>(w) / pixelsPerSecond;
 
   const auto latestFrame = pipeline->latestFrame();
   const qint64 newestTime = latestFrame.timestampMs;
   qint64 viewRightMs;
   if (m_isLive) {
     if (pipeline->isPaused()) {
-      // Freeze the live view at the last data point when paused.
       if (m_liveRightEdgeMs == 0) {
-        m_liveRightEdgeMs = newestTime;
+        m_liveRightEdgeMs = snapRightEdge(newestTime);
       }
       viewRightMs = m_liveRightEdgeMs;
     } else {
-      // Track the newest sample directly in live mode. Quantizing the right edge
-      // caused the trace to disappear or reset when timestamps jumped slightly.
-      m_liveRightEdgeMs = newestTime;
-      viewRightMs = m_liveRightEdgeMs;
+      viewRightMs = snapRightEdge(newestTime);
+      m_liveRightEdgeMs = viewRightMs;
     }
   } else {
     viewRightMs = m_viewAnchorMs;
   }
 
-  // Use a fixed visible time window so the X-axis does not jump while the
-  // strip chart is still filling. In live mode the newest sample stays at the
-  // right edge and the trace grows leftward; once it reaches the left edge it
-  // scrolls. Review mode pans the fixed window.
   const qint64 viewLeftMs =
       viewRightMs - static_cast<qint64>(maxAgeSeconds * 1000.0);
 
-  // Query frames by the exact displayed time range, not by wall-clock now.
-  std::vector<DisplayFrame> visibleFrames =
-      pipeline->framesInRange(viewLeftMs, viewRightMs);
-  if (visibleFrames.empty()) {
-    visibleFrames.push_back(latestFrame);
+  m_cache.setSize(w);
+  // History/review mode is linear per spec; live mode respects the setting.
+  const bool effectiveLogScale = m_isLive && settings->graph_log_scale;
+  m_cache.setParams(effectiveLogScale, pixelsPerSecond, m_isLive);
+
+  const auto frames = pipeline->framesInRange(viewLeftMs, viewRightMs);
+  qint64 actualDataLeftMs = viewRightMs;
+  if (!frames.empty()) {
+    actualDataLeftMs = frames.front().timestampMs;
+  }
+  const double actualMaxAgeSeconds =
+      static_cast<double>(viewRightMs - actualDataLeftMs) / 1000.0;
+
+  if (m_isLive) {
+    m_cache.updateLive(frames, viewRightMs);
+  } else {
+    m_cache.rebuild(frames, viewRightMs);
   }
 
-  const qint64 effectiveNewest = viewRightMs;
-  const qint64 effectiveOldest = viewLeftMs;
-
-  std::vector<double> currentAtPixel;
-  std::vector<double> voltageAtPixel;
-  buildPixelMaps(effectiveNewest, effectiveOldest, visibleFrames,
-                 currentAtPixel, voltageAtPixel);
-
-  // Find min/max over the actual visible frames, not over the entire history
-  // or over the raw sample window. This mirrors the visible graph trace.
-  bool haveData = false;
-  double minCurrent = std::numeric_limits<double>::max();
-  double maxCurrent = std::numeric_limits<double>::lowest();
-  for (const auto &frame : visibleFrames) {
-    if (frame.voltage > 0.0 || frame.current > 0.0) {
-      haveData = true;
-      minCurrent = std::min(minCurrent, frame.current);
-      maxCurrent = std::max(maxCurrent, frame.current);
+  // Compute visible min/max only from entries whose represented age is within
+  // the actual data span. Otherwise log-mode derived pixels at the far left make
+  // it look like history exists before the device started sending data.
+  const auto &entries = m_cache.entries();
+  const double unitMs = 1000.0 / pixelsPerSecond;
+  bool haveVisibleData = false;
+  double visibleMin = std::numeric_limits<double>::max();
+  double visibleMax = std::numeric_limits<double>::lowest();
+  for (int i = 0; i < w; ++i) {
+    if (entries[i].voltage < 0.0) {
+      continue;
     }
+    const double ageSeconds =
+        effectiveLogScale
+            ? steppedAgeForPixel(i, w, pixelsPerSecond)
+            : static_cast<double>(i) * unitMs / 1000.0;
+    if (ageSeconds > actualMaxAgeSeconds + 1e-9) {
+      continue;
+    }
+    haveVisibleData = true;
+    visibleMin = std::min(visibleMin, entries[i].current);
+    visibleMax = std::max(visibleMax, entries[i].current);
   }
+  m_hasVisibleData = haveVisibleData;
+  m_visibleMinCurrent = haveVisibleData ? visibleMin : 0.0;
+  m_visibleMaxCurrent = haveVisibleData ? visibleMax : 0.0;
 
-  // Remember these for the numeric min/max label so it always matches the graph.
-  m_hasVisibleData = haveData;
-  m_visibleMinCurrent = haveData ? minCurrent : 0.0;
-  m_visibleMaxCurrent = haveData ? maxCurrent : 0.0;
+  bool haveData = m_hasVisibleData;
+  double maxCurrent = m_visibleMaxCurrent;
 
   if (!haveData) {
-    minCurrent = 0.0;
     maxCurrent = 0.01;
   }
 
   // Current is never negative; anchor the bottom of the graph at 0.
-  minCurrent = 0.0;
+  const double minCurrent = 0.0;
   maxCurrent = findHighBox(maxCurrent);
 
   // Add a little headroom above the maximum.
@@ -520,8 +565,10 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
 
   drawGrid(p, minCurrent, maxCurrent);
 
-  drawGraphLine(p, currentAtPixel, voltageAtPixel, minCurrent, maxCurrent);
-  drawPeaks(p, currentAtPixel, minCurrent, maxCurrent);
+  drawGraphLine(p, minCurrent, maxCurrent, pixelsPerSecond,
+                actualMaxAgeSeconds);
+  drawPeaks(p, minCurrent, maxCurrent, pixelsPerSecond,
+            actualMaxAgeSeconds);
   drawReviewBorder(p);
 
   if (pipeline && pipeline->isPaused()) {

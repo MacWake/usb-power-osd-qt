@@ -10,6 +10,7 @@
 #include <QLowEnergyService>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMutex>
 
 QT_FORWARD_DECLARE_CLASS(QTimer)
 
@@ -41,6 +42,7 @@ public:
   signals:
     void dataReceived(const QByteArray &data);           // Keep raw data signal
     void powerDataReceived(const PowerData &powerData); // Parsed data signal
+    void discoveryStatusChanged(const QString &message); // User-visible discovery progress
 
 private slots:
     void onDeviceDiscovered(const QBluetoothDeviceInfo &info);
@@ -70,6 +72,8 @@ private:
     QTimer *m_scanTimer;
     QTimer *m_connectTimer;
     QTimer *m_cleanupTimer;
+
+    mutable QMutex m_stateMutex;
     bool m_isConnected = false;
     bool m_isConnecting = false;
     int m_retryCount = 0;

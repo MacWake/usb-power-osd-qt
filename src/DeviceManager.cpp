@@ -18,6 +18,8 @@ DeviceManager::DeviceManager(QObject *parent)
           &DeviceManager::onSourceDisconnected);
   connect(m_bluetoothManager, &PowerDataSource::sampleReceived, this,
           &DeviceManager::onSampleReceived, Qt::QueuedConnection);
+  connect(m_bluetoothManager, &BluetoothManager::discoveryStatusChanged, this,
+          &DeviceManager::btDiscoveryStatusChanged);
 
   connect(m_serialManager, &PowerDataSource::connected, this,
           &DeviceManager::onSourceConnected);

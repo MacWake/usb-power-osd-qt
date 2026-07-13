@@ -52,6 +52,8 @@ private slots:
 
     void onDeviceDisconnected();
 
+    void onBtDiscoveryStatusChanged(const QString &message);
+
     void showSettings();
 
     void updateLabels();

@@ -30,6 +30,7 @@ signals:
   void deviceConnected(const QString &deviceName);
   void deviceDisconnected();
   void powerDataReceived(const PowerData &powerData);
+  void btDiscoveryStatusChanged(const QString &message);
 
 private slots:
   void onSourceConnected(const QString &deviceName);
