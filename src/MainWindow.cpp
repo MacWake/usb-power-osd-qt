@@ -589,6 +589,7 @@ void MainWindow::keyPressEvent(QKeyEvent *event) {
     case Qt::Key_Left:
     case Qt::Key_Right:
     case Qt::Key_Home:
+    case Qt::Key_L:
         m_currentGraph->setFocus();
         m_currentGraph->handleKey(event);
         if (event->isAccepted()) {

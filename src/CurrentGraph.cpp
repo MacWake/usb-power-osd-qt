@@ -1,6 +1,7 @@
 // CurrentGraph.cpp
 #include "CurrentGraph.h"
 
+#include "MeasurementPipeline.h"
 #include "OsdSettings.h"
 #include "PowerDelivery.h"
 
@@ -21,7 +22,9 @@ namespace {
 // 1x, 2x, 4x, 8x, 16x. Leftover pixels from integer division are added to the
 // leftmost segment.
 double steppedAgeForPixel(int idx, int w, double pixelsPerSecond) {
-  const double unit = 1.0 / std::max(pixelsPerSecond, 0.1);
+  const qint64 intervalMs =
+      MeasurementPipeline::pixelsPerSecondToIntervalMs(pixelsPerSecond);
+  const double unit = static_cast<double>(intervalMs) / 1000.0;
   const int baseSegSize = w / 6;
   const int leftover = w - 6 * baseSegSize;
 
@@ -61,15 +64,20 @@ CurrentGraph::CurrentGraph(QWidget *parent, MeasurementPipeline *pipeline,
 }
 
 double CurrentGraph::msPerPixel() const {
-  return 1000.0 / std::max(settings->graph_pixels_per_second, 0.1);
+  return static_cast<double>(
+      MeasurementPipeline::pixelsPerSecondToIntervalMs(settings->graph_pixels_per_second));
 }
 
 qint64 CurrentGraph::snapRightEdge(qint64 newestTime) const {
-  // Snap the live right edge up to the next pixel-grid boundary so the newest
-  // sample always falls inside the rightmost pixel column.
-  const double unit = msPerPixel();
-  return static_cast<qint64>(
-      std::ceil(static_cast<double>(newestTime) / unit) * unit);
+  // Snap the live right edge up to the next integer frame-grid boundary so the
+  // newest sample always falls inside the rightmost pixel column and the graph
+  // advances exactly one pixel per display frame.
+  const qint64 unit = MeasurementPipeline::pixelsPerSecondToIntervalMs(
+      settings->graph_pixels_per_second);
+  if (unit <= 0) {
+    return newestTime;
+  }
+  return ((newestTime + unit - 1) / unit) * unit;
 }
 
 double CurrentGraph::findLowBox(double min_current) {
@@ -146,6 +154,15 @@ void CurrentGraph::handleKey(QKeyEvent *event) {
     return;
   case Qt::Key_Home:
     setLive();
+    event->accept();
+    return;
+  case Qt::Key_L:
+    if (!event->isAutoRepeat()) {
+      settings->graph_log_scale = !settings->graph_log_scale;
+      settings->saveSettings();
+      invalidateCache();
+      update();
+    }
     event->accept();
     return;
   default:
@@ -229,7 +246,9 @@ void CurrentGraph::buildPixelMaps(
       }
     }
   } else {
-    const double msPx = 1000.0 / std::max(pixelsPerSecond, 0.1);
+    const qint64 intervalMs =
+        MeasurementPipeline::pixelsPerSecondToIntervalMs(pixelsPerSecond);
+    const double msPx = static_cast<double>(intervalMs);
     for (const auto &frame : frames) {
       const int i = static_cast<int>(
           std::floor((newestTime - frame.timestampMs) / msPx));
@@ -296,7 +315,8 @@ void CurrentGraph::drawGraphLine(QPainter &p, double minCurrent,
   const int w = m_cache.size();
   const auto &entries = m_cache.entries();
   const bool logScale = m_cache.logScale();
-  const double unitMs = 1000.0 / std::max(pps, 0.1);
+  const qint64 intervalMs =
+      MeasurementPipeline::pixelsPerSecondToIntervalMs(pps);
 
   QPointF lastPoint;
   bool hasLastPoint = false;
@@ -314,7 +334,7 @@ void CurrentGraph::drawGraphLine(QPainter &p, double minCurrent,
     // make it look like history exists before the device started sending data.
     const double representedAgeSeconds =
         logScale ? steppedAgeForPixel(cacheIdx, w, pps)
-                 : static_cast<double>(cacheIdx) * unitMs / 1000.0;
+                 : static_cast<double>(cacheIdx * intervalMs) / 1000.0;
     if (representedAgeSeconds > actualMaxAgeSeconds + 1e-9) {
       hasLastPoint = false;
       continue;
@@ -374,7 +394,8 @@ void CurrentGraph::drawPeaks(QPainter &p, double minCurrent,
   }
   const auto &entries = m_cache.entries();
   const bool logScale = m_cache.logScale();
-  const double unitMs = 1000.0 / std::max(pps, 0.1);
+  const qint64 intervalMs =
+      MeasurementPipeline::pixelsPerSecondToIntervalMs(pps);
 
   double peakMin = std::numeric_limits<double>::infinity();
   double peakMax = -std::numeric_limits<double>::infinity();
@@ -388,7 +409,7 @@ void CurrentGraph::drawPeaks(QPainter &p, double minCurrent,
 
     const double ageSeconds =
         logScale ? steppedAgeForPixel(cacheIdx, w, pps)
-                 : static_cast<double>(cacheIdx) * unitMs / 1000.0;
+                 : static_cast<double>(cacheIdx * intervalMs) / 1000.0;
     if (ageSeconds > actualMaxAgeSeconds + 1e-9) {
       continue;
     }
@@ -473,11 +494,13 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
   const int w = width();
   const double pixelsPerSecond =
       std::max(settings->graph_pixels_per_second, 0.1);
+  const qint64 intervalMs =
+      MeasurementPipeline::pixelsPerSecondToIntervalMs(pixelsPerSecond);
 
   const double maxAgeSeconds =
       settings->graph_log_scale
           ? steppedAgeForPixel(w, w, pixelsPerSecond)
-          : static_cast<double>(w) / pixelsPerSecond;
+          : static_cast<double>(w * intervalMs) / 1000.0;
 
   const auto latestFrame = pipeline->latestFrame();
   const qint64 newestTime = latestFrame.timestampMs;
@@ -522,7 +545,6 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
   // the actual data span. Otherwise log-mode derived pixels at the far left make
   // it look like history exists before the device started sending data.
   const auto &entries = m_cache.entries();
-  const double unitMs = 1000.0 / pixelsPerSecond;
   bool haveVisibleData = false;
   double visibleMin = std::numeric_limits<double>::max();
   double visibleMax = std::numeric_limits<double>::lowest();
@@ -533,7 +555,7 @@ void CurrentGraph::paintEvent(QPaintEvent *event) {
     const double ageSeconds =
         effectiveLogScale
             ? steppedAgeForPixel(i, w, pixelsPerSecond)
-            : static_cast<double>(i) * unitMs / 1000.0;
+            : static_cast<double>(i * intervalMs) / 1000.0;
     if (ageSeconds > actualMaxAgeSeconds + 1e-9) {
       continue;
     }

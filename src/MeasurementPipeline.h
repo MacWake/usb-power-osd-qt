@@ -76,6 +76,16 @@ public:
 
   // Frame timestamps are quantized to this fixed grid (milliseconds per frame).
   [[nodiscard]] qint64 frameIntervalMs() const;
+
+  /**
+   * @brief Pixel width in milliseconds that matches the frame grid.
+   *
+   * The graph uses pixels-per-second from settings, but the actual scroll grid
+   * must align with the pipeline's integer frame interval. Otherwise the live
+   * right edge drifts relative to the bucket timestamps and the graph appears
+   * to freeze and jump.
+   */
+  [[nodiscard]] static qint64 pixelsPerSecondToIntervalMs(double pixelsPerSecond);
   [[nodiscard]] bool isPaused() const { return m_isPaused; }
 
 signals:
