@@ -103,6 +103,7 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && inputs.prerelease == true)
     runs-on: ${{ matrix.runs-on }}
+    container: ${{ matrix.container }}
     strategy:
       fail-fast: false
       matrix:
@@ -202,40 +203,78 @@ jobs:
         run: |
           $wixInstallDir = "C:\Program Files (x86)\WiX Toolset v3.11"
           $wixBinDir = Join-Path $wixInstallDir "bin"
-          $candidates = @(
-            (Join-Path $wixBinDir "candle.exe"),
-            (Join-Path $wixInstallDir "candle.exe")
-          )
 
-          $candle = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if ($candle) {
-            $wixBinDir = Split-Path -Parent $candle
-            $light = Join-Path $wixBinDir "light.exe"
-            Write-Host "WiX 3.11 already present at $wixBinDir"
-          } else {
+          function Ensure-WixTools {
+            $candleInBin = Join-Path $wixBinDir "candle.exe"
+            $lightInBin = Join-Path $wixBinDir "light.exe"
+            if ((Test-Path $candleInBin) -and (Test-Path $lightInBin)) {
+              return
+            }
+
+            # If the tools were extracted at the install root, move them into bin/.
+            $candleRoot = Join-Path $wixInstallDir "candle.exe"
+            $lightRoot = Join-Path $wixInstallDir "light.exe"
+            if ((Test-Path $candleRoot) -and (Test-Path $lightRoot)) {
+              New-Item -ItemType Directory -Force -Path $wixBinDir | Out-Null
+              Move-Item -Path $candleRoot -Destination $candleInBin -Force
+              Move-Item -Path $lightRoot -Destination $lightInBin -Force
+              # Move related WiX DLLs/EXEs as well so the tools work from bin/.
+              Get-ChildItem -Path $wixInstallDir -File | Where-Object {
+                $_.Extension -in @('.dll', '.exe', '.config')
+              } | ForEach-Object {
+                $dest = Join-Path $wixBinDir $_.Name
+                if (-not (Test-Path $dest)) {
+                  Move-Item -Path $_.FullName -Destination $dest -Force
+                }
+              }
+              return
+            }
+
             Write-Host "Downloading WiX 3.11.2 binaries..."
             $zip = "$env:TEMP\wix311-binaries.zip"
             Invoke-WebRequest -Uri https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip -OutFile $zip
             New-Item -ItemType Directory -Force -Path $wixInstallDir | Out-Null
             Expand-Archive -Path $zip -DestinationPath $wixInstallDir -Force
 
-            $candle = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-            if (-not $candle) {
+            # The zip may contain a single top-level folder or dump files at root.
+            $extractedRoot = $wixInstallDir
+            $subDirs = Get-ChildItem -Path $wixInstallDir -Directory
+            if ($subDirs.Count -eq 1) {
+              $extractedRoot = $subDirs[0].FullName
+            }
+
+            $candleSrc = Join-Path $extractedRoot "candle.exe"
+            $lightSrc = Join-Path $extractedRoot "light.exe"
+            if (-not (Test-Path $candleSrc) -or -not (Test-Path $lightSrc)) {
               Write-Host "Archive contents after extraction:"
-              Get-ChildItem -Path $wixInstallDir -Recurse -File | Select-Object -First 30 | ForEach-Object { Write-Host $_.FullName }
+              Get-ChildItem -Path $wixInstallDir -Recurse -File | Select-Object -First 40 | ForEach-Object { Write-Host $_.FullName }
               throw "WiX 3.11 tools (candle.exe/light.exe) not found after extraction"
             }
-            $wixBinDir = Split-Path -Parent $candle
-            $light = Join-Path $wixBinDir "light.exe"
+
+            New-Item -ItemType Directory -Force -Path $wixBinDir | Out-Null
+            Get-ChildItem -Path $extractedRoot -File | Where-Object {
+              $_.Extension -in @('.dll', '.exe', '.config')
+            } | ForEach-Object {
+              $dest = Join-Path $wixBinDir $_.Name
+              Move-Item -Path $_.FullName -Destination $dest -Force
+            }
+            if ($extractedRoot -ne $wixInstallDir) {
+              Remove-Item -Path $extractedRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
           }
 
-          if (-not (Test-Path $light)) {
-            throw "light.exe not found alongside candle.exe at $wixBinDir"
-          }
+          Ensure-WixTools
 
-          # CPack WIX generator uses the WIX environment variable to locate the toolset.
-          # It expects the directory that contains candle.exe and light.exe.
-          echo "WIX=$wixBinDir" >> $env:GITHUB_ENV
+          $candle = Join-Path $wixBinDir "candle.exe"
+          $light = Join-Path $wixBinDir "light.exe"
+          if (-not (Test-Path $candle) -or -not (Test-Path $light)) {
+            throw "WiX 3.11 tools not found in $wixBinDir"
+          }
+          Write-Host "WiX 3.11 ready: candle=$candle, light=$light"
+
+          # CPack WIX generator uses the WIX environment variable to locate the toolset
+          # and expects candle.exe/light.exe under <WIX>\bin\.
+          echo "WIX=$wixInstallDir" >> $env:GITHUB_ENV
           echo "$wixBinDir" >> $env:GITHUB_PATH
 
       - name: Install Qt (Unixoid)
@@ -428,6 +467,19 @@ jobs:
           cmake --build build --config Release --target install
           # Then create the package
           cmake --build build --config Release --target package
+
+      - name: Dump WiX log on CPack failure
+        if: matrix.name == 'Windows' && failure()
+        shell: pwsh
+        run: |
+          $wixLog = "${{github.workspace}}/build/_CPack_Packages/win64/WIX/wix.log"
+          if (Test-Path $wixLog) {
+            Write-Host "=== $wixLog ==="
+            Get-Content $wixLog -Raw | Write-Host
+          } else {
+            Write-Host "No wix.log found at $wixLog"
+            Get-ChildItem -Path "${{github.workspace}}/build/_CPack_Packages" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 20 | ForEach-Object { Write-Host $_.FullName }
+          }
 
       - name: Find MSI file
         if: matrix.name == 'Windows'
