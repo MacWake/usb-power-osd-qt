@@ -338,7 +338,9 @@ jobs:
       - name: Configure CMake for Windows
         if: matrix.name == 'Windows'
         run: |
-          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" -DPROJECT_VERSION_OVERRIDE="${{ steps.get_version.outputs.version }}" -DCPACK_PACKAGE_VERSION="${{ steps.release_version.outputs.version }}"
+          # WiX requires a strict x.x.x.x numeric version, so pass the base
+          # numeric version (e.g. 1.5.0) to CPack, not the prerelease tag.
+          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" -DPROJECT_VERSION_OVERRIDE="${{ steps.get_version.outputs.version }}" -DCPACK_PACKAGE_VERSION="${{ steps.get_version.outputs.version }}"
 
       - name: Configure CMake (non-Windows)
         if: matrix.name != 'Windows'
@@ -414,19 +416,22 @@ jobs:
         run: |
           cd ${{github.workspace}}/build
           cpack -G DEB
+          ls -la *.deb
 
       - name: Create RPM package (Fedora)
         if: matrix.name == 'Linux-Fedora'
         run: |
           cd ${{github.workspace}}/build
           cpack -G RPM
+          ls -la *.rpm
 
       - name: Upload DEB package
         if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
         uses: actions/upload-artifact@v7
         with:
           name: linux-deb-${{ matrix.distro }}
-          path: ${{github.workspace}}/build/*.deb
+          # Use a relative path so upload-artifact works reliably in container jobs.
+          path: build/*.deb
           if-no-files-found: error
 
       - name: Upload RPM package
@@ -434,7 +439,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: linux-rpm-${{ matrix.distro }}
-          path: ${{github.workspace}}/build/*.rpm
+          # Use a relative path so upload-artifact works reliably in container jobs.
+          path: build/*.rpm
           if-no-files-found: error
 
       - name: Create zip archive (Windows)
