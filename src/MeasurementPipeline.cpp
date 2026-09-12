@@ -370,9 +370,13 @@ void MeasurementPipeline::pruneBuckets() {
   if (m_frameBuckets.empty()) {
     return;
   }
-  const qint64 now = QDateTime::currentMSecsSinceEpoch();
+  // All bucket timestamps are in stream time (effectiveSampleTs - pauseOffsetMs),
+  // so the pruning window must be computed relative to the newest bucket rather
+  // than wall-clock time. Using wall-clock here would cause premature pruning
+  // (or complete clearing) after any pause because stream time lags behind.
+  const qint64 newestTs = m_frameBuckets.rbegin()->first;
   const qint64 oldestAllowedTs =
-      bucketTimestampFor(now - static_cast<qint64>(m_maxHistorySeconds.load() * 1000.0));
+      bucketTimestampFor(newestTs - static_cast<qint64>(m_maxHistorySeconds.load() * 1000.0));
   auto it = m_frameBuckets.begin();
   while (it != m_frameBuckets.end() && it->first < oldestAllowedTs) {
     it = m_frameBuckets.erase(it);
