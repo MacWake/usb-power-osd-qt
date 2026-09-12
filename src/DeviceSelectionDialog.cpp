@@ -181,12 +181,18 @@ void DeviceSelectionDialog::onOkButtonClicked()
         
         // Protocol verification
         if (m_parent && m_parent->getDeviceManager()) {
-            this->setCursor(Qt::WaitCursor);
+            m_okButton->setEnabled(false);
+            m_cancelButton->setEnabled(false);
+            m_okButton->setText("Connecting…");
+
             bool success = m_parent->getDeviceManager()->tryConnect(m_selectedSerialPort);
-            this->setCursor(Qt::ArrowCursor);
-            
+
+            m_okButton->setText("OK");
+            m_cancelButton->setEnabled(true);
+            updateControlStates();
+
             if (!success) {
-                QMessageBox::critical(this, "Protocol Verification Failed", 
+                QMessageBox::critical(this, "Protocol Verification Failed",
                                      QString("Failed to verify protocol on %1. "
                                              "Please ensure the device is connected and using a supported protocol.")
                                      .arg(m_selectedSerialPort));

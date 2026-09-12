@@ -10,6 +10,16 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: 'Create a prerelease'
+        type: boolean
+        default: false
+        required: false
+      tag:
+        description: 'Tag name for the prerelease (e.g. v2.1.0-beta.1)'
+        type: string
+        required: false
 
 jobs:
   # Quick build job for PRs only
@@ -24,12 +34,12 @@ jobs:
           - name: Linux
             runs-on: ubuntu-24.04
           - name: Windows
-            runs-on: windows-latest
+            runs-on: windows-2022
           - name: macOS
             runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install additional Linux dependencies
         if: matrix.name == 'Linux'
@@ -86,11 +96,14 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" ${{ matrix.name == 'macOS' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
           cmake --build build --config Release
 
-  # Full release build - runs on every push to main
+  # Full release build - runs on every push to main and on manual prerelease
   release-build:
     name: Release Build on ${{ matrix.name }}
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.prerelease == true)
     runs-on: ${{ matrix.runs-on }}
+    container: ${{ matrix.container }}
     strategy:
       fail-fast: false
       matrix:
@@ -102,26 +115,32 @@ jobs:
             distro: ubuntu-24.04
           - name: Linux-Debian
             runs-on: ubuntu-latest
-            container: debian:bookworm
+            container: debian:trixie
             generator: "Unix Makefiles"
             build_type: Release
-            distro: debian-12
+            distro: debian-13
+          - name: Linux-Fedora
+            runs-on: ubuntu-latest
+            container: fedora:latest
+            generator: "Unix Makefiles"
+            build_type: Release
+            distro: fedora
           - name: macOS
             runs-on: macos-latest
             generator: "Unix Makefiles"
             build_type: Release
           - name: Windows
-            runs-on: windows-latest
+            runs-on: windows-2022
             build_type: Release
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       # Get version from semantic-release
       - name: Set Up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
 
@@ -131,16 +150,43 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NEXT_VERSION=$(npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/commit-analyzer --package @semantic-release/github --package @semantic-release/release-notes-generator semantic-release --dry-run 2>/dev/null | grep -o "The next release version is [0-9]\+\.[0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+" || echo "")
-          if [ -z "$NEXT_VERSION" ]; then
-            # Fallback: get the current version from git tags
-            NEXT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ inputs.tag }}" ]; then
+            # Manual prerelease: strip leading 'v' and prerelease suffix for the binary/package version
+            NEXT_VERSION=$(echo "${{ inputs.tag }}" | sed 's/^[vV]//' | sed -E 's/-[a-zA-Z0-9.]+$//')
+          else
+            NEXT_VERSION=$(npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/commit-analyzer --package @semantic-release/github --package @semantic-release/release-notes-generator semantic-release --dry-run 2>/dev/null | grep -o "The next release version is [0-9]\+\.[0-9]\+\.[0-9]\+" | grep -o "[0-9]\+\.[0-9]\+\.[0-9]\+" || echo "")
             if [ -z "$NEXT_VERSION" ]; then
-              NEXT_VERSION="0.1.0"
+              # Fallback: get the current version from git tags
+              NEXT_VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+              if [ -z "$NEXT_VERSION" ]; then
+                NEXT_VERSION="0.1.0"
+              fi
             fi
           fi
           echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
           echo "Next version will be: $NEXT_VERSION"
+
+      - name: Get Release Version
+        id: release_version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ inputs.tag }}" ]; then
+            # Keep the full prerelease tag for release asset filenames
+            echo "version=$(echo '${{ inputs.tag }}' | sed 's/^[vV]//')" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ steps.get_version.outputs.version }}" >> $GITHUB_OUTPUT
+          fi
+          echo "Release version for filenames: $(cat $GITHUB_OUTPUT | grep '^version=' | cut -d= -f2)"
+
+      - name: Get Package Version
+        id: package_version
+        shell: bash
+        run: |
+          # Debian/RPM prerelease ordering: 1.5.0-beta.1 -> 1.5.0~beta.1
+          RELEASE="${{ steps.release_version.outputs.version }}"
+          PKG=$(echo "$RELEASE" | sed 's/-/~/')
+          echo "version=$PKG" >> $GITHUB_OUTPUT
+          echo "Package version for DEB/RPM metadata: $PKG"
 
       - name: Setup Python environment (macOS)
         if: matrix.name == 'macOS'
@@ -151,9 +197,85 @@ jobs:
           echo "VIRTUAL_ENV=$HOME/.qt-venv" >> $GITHUB_ENV
           echo "$HOME/.qt-venv/bin" >> $GITHUB_PATH
 
-      - name: Install WiX Toolset
+      - name: Install WiX Toolset v3.11
         if: matrix.name == 'Windows'
-        run: choco install wixtoolset --no-progress -y
+        shell: pwsh
+        run: |
+          $wixInstallDir = "C:\Program Files (x86)\WiX Toolset v3.11"
+          $wixBinDir = Join-Path $wixInstallDir "bin"
+
+          function Ensure-WixTools {
+            $candleInBin = Join-Path $wixBinDir "candle.exe"
+            $lightInBin = Join-Path $wixBinDir "light.exe"
+            if ((Test-Path $candleInBin) -and (Test-Path $lightInBin)) {
+              return
+            }
+
+            # If the tools were extracted at the install root, move them into bin/.
+            $candleRoot = Join-Path $wixInstallDir "candle.exe"
+            $lightRoot = Join-Path $wixInstallDir "light.exe"
+            if ((Test-Path $candleRoot) -and (Test-Path $lightRoot)) {
+              New-Item -ItemType Directory -Force -Path $wixBinDir | Out-Null
+              Move-Item -Path $candleRoot -Destination $candleInBin -Force
+              Move-Item -Path $lightRoot -Destination $lightInBin -Force
+              # Move related WiX DLLs/EXEs as well so the tools work from bin/.
+              Get-ChildItem -Path $wixInstallDir -File | Where-Object {
+                $_.Extension -in @('.dll', '.exe', '.config')
+              } | ForEach-Object {
+                $dest = Join-Path $wixBinDir $_.Name
+                if (-not (Test-Path $dest)) {
+                  Move-Item -Path $_.FullName -Destination $dest -Force
+                }
+              }
+              return
+            }
+
+            Write-Host "Downloading WiX 3.11.2 binaries..."
+            $zip = "$env:TEMP\wix311-binaries.zip"
+            Invoke-WebRequest -Uri https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip -OutFile $zip
+            New-Item -ItemType Directory -Force -Path $wixInstallDir | Out-Null
+            Expand-Archive -Path $zip -DestinationPath $wixInstallDir -Force
+
+            # The zip may contain a single top-level folder or dump files at root.
+            $extractedRoot = $wixInstallDir
+            $subDirs = Get-ChildItem -Path $wixInstallDir -Directory
+            if ($subDirs.Count -eq 1) {
+              $extractedRoot = $subDirs[0].FullName
+            }
+
+            $candleSrc = Join-Path $extractedRoot "candle.exe"
+            $lightSrc = Join-Path $extractedRoot "light.exe"
+            if (-not (Test-Path $candleSrc) -or -not (Test-Path $lightSrc)) {
+              Write-Host "Archive contents after extraction:"
+              Get-ChildItem -Path $wixInstallDir -Recurse -File | Select-Object -First 40 | ForEach-Object { Write-Host $_.FullName }
+              throw "WiX 3.11 tools (candle.exe/light.exe) not found after extraction"
+            }
+
+            New-Item -ItemType Directory -Force -Path $wixBinDir | Out-Null
+            Get-ChildItem -Path $extractedRoot -File | Where-Object {
+              $_.Extension -in @('.dll', '.exe', '.config')
+            } | ForEach-Object {
+              $dest = Join-Path $wixBinDir $_.Name
+              Move-Item -Path $_.FullName -Destination $dest -Force
+            }
+            if ($extractedRoot -ne $wixInstallDir) {
+              Remove-Item -Path $extractedRoot -Recurse -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+          Ensure-WixTools
+
+          $candle = Join-Path $wixBinDir "candle.exe"
+          $light = Join-Path $wixBinDir "light.exe"
+          if (-not (Test-Path $candle) -or -not (Test-Path $light)) {
+            throw "WiX 3.11 tools not found in $wixBinDir"
+          }
+          Write-Host "WiX 3.11 ready: candle=$candle, light=$light"
+
+          # CPack WIX generator uses the WIX environment variable to locate the toolset
+          # and expects candle.exe/light.exe under <WIX>\bin\.
+          echo "WIX=$wixInstallDir" >> $env:GITHUB_ENV
+          echo "$wixBinDir" >> $env:GITHUB_PATH
 
       - name: Install Qt (Unixoid)
         if: matrix.name == 'macOS'
@@ -176,18 +298,34 @@ jobs:
           modules: 'qtserialport qtconnectivity qtmultimedia'
           cache: true
 
-      - name: Install additional Linux dependencies
-        if: startsWith(matrix.name, 'Linux')
+      - name: Install additional Linux dependencies (Debian/Ubuntu)
+        if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
         run: |
           if [ -f /usr/bin/sudo ]; then SUDO=sudo; else SUDO=; fi
           $SUDO apt-get update
-          $SUDO apt-get install -y build-essential cmake git libgl1-mesa-dev libxkbcommon-x11-0 rpm
+          $SUDO apt-get install -y build-essential cmake git libgl1-mesa-dev libxkbcommon-x11-0
           # Install system Qt6 instead of using qt-installer
           $SUDO apt-get install -y qt6-base-dev qt6-serialport-dev qt6-connectivity-dev qt6-multimedia-dev
 
+      - name: Install additional Linux dependencies (Fedora)
+        if: matrix.name == 'Linux-Fedora'
+        run: |
+          # Minimal fedora containers may ship dnf5, dnf, yum, or microdnf.
+          DNF=$(command -v dnf5 || command -v dnf || command -v yum || command -v microdnf)
+          if [ -z "$DNF" ]; then
+            echo "No supported package manager found in fedora container"
+            echo "PATH=$PATH"
+            ls -la /usr/bin/*dnf* /usr/bin/yum /usr/bin/microdnf 2>/dev/null || true
+            exit 1
+          fi
+          echo "Using package manager: $DNF"
+          $DNF install -y gcc-c++ cmake git mesa-libGL-devel libxkbcommon-x11-devel \
+            qt6-qtbase-devel qt6-qtserialport-devel qt6-qtconnectivity-devel qt6-qtmultimedia-devel \
+            rpm-build
+
       - name: Import Code-Signing Certificates
         if: matrix.name == 'macOS'
-        uses: Apple-Actions/import-codesign-certs@v2
+        uses: Apple-Actions/import-codesign-certs@v7
         with:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -195,124 +333,153 @@ jobs:
 
       - name: Setup MSVC (Windows)
         if: matrix.name == 'Windows'
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
 
       - name: Configure CMake for Windows
         if: matrix.name == 'Windows'
         run: |
-          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" -DPROJECT_VERSION_OVERRIDE="${{ steps.get_version.outputs.version }}"
+          # WiX requires a strict x.x.x.x numeric version, so pass the base
+          # numeric version (e.g. 1.5.0) to CPack, not the prerelease tag.
+          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" -DPROJECT_VERSION_OVERRIDE="${{ steps.get_version.outputs.version }}" -DCPACK_PACKAGE_VERSION="${{ steps.get_version.outputs.version }}"
 
       - name: Configure CMake (non-Windows)
         if: matrix.name != 'Windows'
         run: >
-          cmake -B ${{github.workspace}}/build 
-          -G "${{matrix.generator}}" 
+          cmake -B build
+          -G "${{matrix.generator}}"
           -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
           -DCMAKE_PREFIX_PATH=${{env.Qt6_DIR}}
           -DPROJECT_VERSION_OVERRIDE="${{ steps.get_version.outputs.version }}"
+          -DCPACK_DEBIAN_PACKAGE_VERSION="${{ steps.package_version.outputs.version }}"
+          -DCPACK_RPM_PACKAGE_VERSION="${{ steps.package_version.outputs.version }}"
           -DLINUX_DISTRO="${{ matrix.distro }}"
           ${{ matrix.name == 'macOS' && '-DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"' || '' }}
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+        run: cmake --build build --config ${{matrix.build_type}}
 
       - name: Debug build output (Unixoid)
         if: matrix.name != 'Windows'
         run: |
           echo "Listing build directory contents:"
-          ls -lRa ${{github.workspace}}/build/
+          ls -lRa build/
 
       - name: Debug build output (Windows)
         if: matrix.name == 'Windows'
         run: |
           echo "Listing build directory contents:"
-          dir -s ${{github.workspace}}/build/
+          dir -s build/
 
       # Linux deployment - bundle Qt libraries
       - name: Deploy Qt libraries (Linux)
         if: startsWith(matrix.name, 'Linux')
         run: |
           # Create deployment directory
-          mkdir -p ${{github.workspace}}/deploy/linux
-          
+          mkdir -p deploy/linux
+
           # Copy the executable
-          cp "${{github.workspace}}/build/USB-Power-OSD" "${{github.workspace}}/deploy/linux/"
-          
+          cp "build/USB-Power-OSD" "deploy/linux/"
+
           # Copy Qt libraries
-          mkdir -p ${{github.workspace}}/deploy/linux/lib
-          
+          mkdir -p deploy/linux/lib
+
           # Find and copy Qt libraries that the executable depends on
-          ldd "${{github.workspace}}/deploy/linux/USB-Power-OSD" 2>/dev/null | grep -i qt6 | awk '{print $3}' | while read lib; do
+          ldd "deploy/linux/USB-Power-OSD" 2>/dev/null | grep -i qt6 | awk '{print $3}' | while read lib; do
             if [ -f "$lib" ]; then
-              cp "$lib" "${{github.workspace}}/deploy/linux/lib/"
+              cp "$lib" "deploy/linux/lib/"
             fi
           done
-          
+
           # Copy platform plugins
-          mkdir -p ${{github.workspace}}/deploy/linux/plugins/platforms
+          mkdir -p deploy/linux/plugins/platforms
           if [ -d "${{env.Qt6_DIR}}/../plugins/platforms" ]; then
-            cp -r "${{env.Qt6_DIR}}/../plugins/platforms"/* "${{github.workspace}}/deploy/linux/plugins/platforms/"
+            cp -r "${{env.Qt6_DIR}}/../plugins/platforms"/* "deploy/linux/plugins/platforms/"
           fi
-          
+
           # Create a launcher script that sets up the library path
-          cat > "${{github.workspace}}/deploy/linux/usb-power-osd.sh" << 'EOF'
+          cat > "deploy/linux/usb-power-osd.sh" << 'EOF'
           #!/bin/bash
           SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
           export LD_LIBRARY_PATH="$SCRIPT_DIR/lib:$LD_LIBRARY_PATH"
           export QT_PLUGIN_PATH="$SCRIPT_DIR/plugins"
           exec "$SCRIPT_DIR/USB-Power-OSD" "$@"
           EOF
-          
-          chmod +x "${{github.workspace}}/deploy/linux/usb-power-osd.sh"
-          
-          # Create a simple tar.gz archive
-          cd ${{github.workspace}}/deploy
-          tar -czf ../USB-Power-OSD-Linux-${{ steps.get_version.outputs.version }}-${{ matrix.distro }}.tar.gz linux/
 
-      - name: Create DEB and RPM packages (Linux)
-        if: startsWith(matrix.name, 'Linux')
+          chmod +x "deploy/linux/usb-power-osd.sh"
+
+          # Create a simple tar.gz archive
+          cd deploy
+          tar -czf ../USB-Power-OSD-Linux-${{ steps.release_version.outputs.version }}-${{ matrix.distro }}.tar.gz linux/
+
+      - name: Create DEB package (Debian/Ubuntu)
+        if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
         run: |
-          cd ${{github.workspace}}/build
+          cd build
           cpack -G DEB
+          ls -la *.deb
+
+      - name: Create RPM package (Fedora)
+        if: matrix.name == 'Linux-Fedora'
+        run: |
+          cd build
           cpack -G RPM
+          ls -la *.rpm
+
+      - name: Stage DEB package for upload
+        if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
+        run: |
+          mkdir -p packages
+          cp build/*.deb packages/
+          ls -la packages/
 
       - name: Upload DEB package
-        if: startsWith(matrix.name, 'Linux')
-        uses: actions/upload-artifact@v4
+        if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
+        uses: actions/upload-artifact@v7
         with:
           name: linux-deb-${{ matrix.distro }}
-          path: ${{github.workspace}}/build/*.deb
+          # Use a clean directory with only the package; upload-artifact has
+          # repeatedly failed to find the file inside the build/ directory.
+          path: packages/*.deb
           if-no-files-found: error
 
+      - name: Stage RPM package for upload
+        if: matrix.name == 'Linux-Fedora'
+        run: |
+          mkdir -p packages
+          cp build/*.rpm packages/
+          ls -la packages/
+
       - name: Upload RPM package
-        if: startsWith(matrix.name, 'Linux')
-        uses: actions/upload-artifact@v4
+        if: matrix.name == 'Linux-Fedora'
+        uses: actions/upload-artifact@v7
         with:
           name: linux-rpm-${{ matrix.distro }}
-          path: ${{github.workspace}}/build/*.rpm
+          # Use a clean directory with only the package; upload-artifact has
+          # repeatedly failed to find the file inside the build/ directory.
+          path: packages/*.rpm
           if-no-files-found: error
 
       - name: Create zip archive (Windows)
         if: matrix.name == 'Windows'
         run: |
           # Create deployment directory
-          mkdir -p ${{github.workspace}}\deploy\windows
-          copy "${{github.workspace}}\build\Release\USB-Power-OSD.exe" "${{github.workspace}}\deploy\windows"
-          windeployqt --release --no-translations --dir "${{github.workspace}}\deploy\windows" "${{github.workspace}}\deploy\windows\USB-Power-OSD.exe"
-          
+          mkdir -p deploy\windows
+          copy "build\Release\USB-Power-OSD.exe" "deploy\windows"
+          windeployqt --release --no-translations --dir "deploy\windows" "deploy\windows\USB-Power-OSD.exe"
+
           # Also deploy directly to the build directory for CPack
-          windeployqt --release --no-translations --dir "${{github.workspace}}\build\Release" "${{github.workspace}}\build\Release\USB-Power-OSD.exe"
-          
+          windeployqt --release --no-translations --dir "build\Release" "build\Release\USB-Power-OSD.exe"
+
           # Create a zip archive
-          cd ${{github.workspace}}\deploy
-          powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows-${{ steps.get_version.outputs.version }}.zip"
+          cd deploy
+          powershell Compress-Archive -Path "windows\*" -DestinationPath "..\USB-Power-OSD-Windows-${{ steps.release_version.outputs.version }}.zip"
 
       - name: Upload Windows artifacts
         if: matrix.name == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-zip
-          path: ${{github.workspace}}/USB-Power-OSD-Windows-${{ steps.get_version.outputs.version }}.zip
+          path: USB-Power-OSD-Windows-${{ steps.release_version.outputs.version }}.zip
           if-no-files-found: error
 
       - name: Create MSI with CPack
@@ -322,6 +489,19 @@ jobs:
           cmake --build build --config Release --target install
           # Then create the package
           cmake --build build --config Release --target package
+
+      - name: Dump WiX log on CPack failure
+        if: matrix.name == 'Windows' && failure()
+        shell: pwsh
+        run: |
+          $wixLog = "build/_CPack_Packages/win64/WIX/wix.log"
+          if (Test-Path $wixLog) {
+            Write-Host "=== $wixLog ==="
+            Get-Content $wixLog -Raw | Write-Host
+          } else {
+            Write-Host "No wix.log found at $wixLog"
+            Get-ChildItem -Path "build/_CPack_Packages" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 20 | ForEach-Object { Write-Host $_.FullName }
+          }
 
       - name: Find MSI file
         if: matrix.name == 'Windows'
@@ -357,40 +537,40 @@ jobs:
 
       - name: Upload MSI artifact
         if: matrix.name == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-msi
           path: "${{ steps.find_msi.outputs.MSI_PATH }}"
 
-      - name: Upload Linux artifacts
-        if: startsWith(matrix.name, 'Linux')
-        uses: actions/upload-artifact@v4
+      - name: Upload Linux tarball
+        if: startsWith(matrix.name, 'Linux') && matrix.name != 'Linux-Fedora'
+        uses: actions/upload-artifact@v7
         with:
           name: linux-build-${{ matrix.distro }}
-          path: ${{github.workspace}}/USB-Power-OSD-Linux-${{ steps.get_version.outputs.version }}-${{ matrix.distro }}.tar.gz
+          path: USB-Power-OSD-Linux-${{ steps.release_version.outputs.version }}-${{ matrix.distro }}.tar.gz
           if-no-files-found: error
 
       - name: Deploy Qt libraries (macOS)
         if: matrix.name == 'macOS'
         run: |
           # Use macdeployqt to bundle Qt libraries into the app
-          macdeployqt "${{github.workspace}}/build/USB-Power-OSD.app" -verbose=1
-          
+          macdeployqt "build/USB-Power-OSD.app" -verbose=1
+
           # Verify the app structure after deployment
           echo "App structure after macdeployqt:"
-          ls -la "${{github.workspace}}/build/USB-Power-OSD.app/Contents/"
+          ls -la "build/USB-Power-OSD.app/Contents/"
 
       - name: Sign the macOS application
         if: matrix.name == 'macOS'
         run: |
           echo "Signing with Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}"
           echo "Signing app bundle..."
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --deep --verbose "${{github.workspace}}/build/USB-Power-OSD.app"
-          
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --deep --verbose "build/USB-Power-OSD.app"
+
           # Verify the signature
           echo "Verifying signature..."
-          /usr/bin/codesign --verify --deep --strict --verbose=2 "${{github.workspace}}/build/USB-Power-OSD.app"
-          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "${{github.workspace}}/build/USB-Power-OSD.app"
+          /usr/bin/codesign --verify --deep --strict --verbose=2 "build/USB-Power-OSD.app"
+          /usr/bin/codesign --force --options runtime --sign "Developer ID Application: ${{ vars.APPLE_SIGNING_ID }}" --verbose "build/USB-Power-OSD.app"
 
       - name: Create ZIP archive (macOS)
         if: matrix.name == 'macOS'
@@ -399,44 +579,41 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
         run: |
           # Create a ZIP archive of the app
-          ditto -c -k --keepParent "${{github.workspace}}/build/USB-Power-OSD.app" "${{github.workspace}}/build/USB-Power-OSD-${{ steps.get_version.outputs.version }}.zip"
-          
+          ditto -c -k --keepParent "build/USB-Power-OSD.app" "build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip"
+
           # Notarize the app via ZIP
-          xcrun notarytool submit "${{github.workspace}}/build/USB-Power-OSD-${{ steps.get_version.outputs.version }}.zip" \
+          xcrun notarytool submit "build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip" \
             --apple-id "$APPLE_ID" \
             --password "$APPLE_ID_PASSWORD" \
             --team-id "${{ vars.APPLE_TEAM_ID }}" \
             --wait
-          
+
           # Staple the notarization ticket
-          xcrun stapler staple "${{github.workspace}}/build/USB-Power-OSD.app"
+          xcrun stapler staple "build/USB-Power-OSD.app"
 
       - name: Upload macOS zip
         if: matrix.name == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-zip
-          path: ${{github.workspace}}/build/USB-Power-OSD-${{ steps.get_version.outputs.version }}.zip
+          path: build/USB-Power-OSD-${{ steps.release_version.outputs.version }}.zip
           if-no-files-found: error
 
-      - name: Upload macOS artifacts
-        if: matrix.name == 'macOS'
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-build
-          path: ${{github.workspace}}/build/USB-Power-OSD.app
-          if-no-files-found: error
       # Create dmg
       - name: Create dmg
         if: matrix.name == 'macOS'
         run: |
-          hdiutil create -volname "MacWake USB Power OSD" -srcfolder "build/USB-Power-OSD.app" "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg"
+          # Stage the app and the user manual together for the DMG
+          mkdir -p "build/dmg-staging"
+          cp -R "build/USB-Power-OSD.app" "build/dmg-staging/"
+          cp "build/USER_MANUAL.html" "build/dmg-staging/User Manual.html"
+          hdiutil create -volname "MacWake USB Power OSD" -srcfolder "build/dmg-staging" "build/Macwake USB Power ${{ steps.release_version.outputs.version }}.dmg"
 
       # Notarize dmg
       - name: Notarize app
         if: matrix.name == 'macOS'
         run: |
-          xcrun notarytool submit "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg" \
+          xcrun notarytool submit "build/Macwake USB Power ${{ steps.release_version.outputs.version }}.dmg" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_PASSWORD" \
@@ -450,19 +627,21 @@ jobs:
       - name: Staple app
         if: matrix.name == 'macOS'
         run: |
-          xcrun stapler staple "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg"
+          xcrun stapler staple "build/Macwake USB Power ${{ steps.release_version.outputs.version }}.dmg"
 
       - name: Upload artifact
         if: matrix.name == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macOS Application Image
-          path: "build/Macwake USB Power ${{ steps.get_version.outputs.version }}.dmg"
+          path: "build/Macwake USB Power ${{ steps.release_version.outputs.version }}.dmg"
 
   release:
     name: Publish New Release
     needs: release-build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.prerelease == true)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -470,24 +649,42 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
-      # Set up Node.js for Semantic Release
+      # Automatic release via semantic-release for pushes to main
       - name: Set Up Node.js
-        uses: actions/setup-node@v3
+        if: github.event_name == 'push'
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: 'npm'
 
       # Run Semantic Release - it will decide whether to create a release
       - name: Run Semantic Release
+        if: github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx --package semantic-release --package @semantic-release/changelog --package @semantic-release/commit-analyzer --package @semantic-release/github --package @semantic-release/release-notes-generator semantic-release
+
+      # Manual prerelease via workflow_dispatch
+      - name: Create Prerelease
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: ${{ inputs.tag }}
+          prerelease: true
+          files: |
+            artifacts/**/*.zip
+            artifacts/**/*.msi
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.dmg
+          fail_on_unmatched_files: false

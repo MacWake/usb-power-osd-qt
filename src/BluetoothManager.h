@@ -1,34 +1,48 @@
 #ifndef BLUETOOTHMANAGER_H
 #define BLUETOOTHMANAGER_H
 
-#include <QObject>
+#include "PowerDataSource.h"
+#include "PowerMonitor.h"
+
 #include <QBluetoothDeviceDiscoveryAgent>
 #include <QBluetoothDeviceInfo>
 #include <QLowEnergyController>
 #include <QLowEnergyService>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include "PowerMonitor.h"
+#include <QMutex>
 
 QT_FORWARD_DECLARE_CLASS(QTimer)
 
-class BluetoothManager : public QObject
+class BluetoothManager : public PowerDataSource
 {
     Q_OBJECT
 
 public:
     explicit BluetoothManager(QObject *parent = nullptr);
     ~BluetoothManager() override;
-    
+
+    void start() override;
+    void stop() override;
+    [[nodiscard]] QString sourceName() const override;
+    [[nodiscard]] bool isConnected() const override;
+
     void startScanning();
     void stopScanning();
     void disconnect();
 
+    /**
+     * @brief Parse a V2-BLE JSON payload into a PowerData sample.
+     *
+     * Exposed as a public static helper so it can be unit-tested without
+     * instantiating a BluetoothManager or connecting to hardware.
+     */
+    static PowerData parseJsonToPowerData(const QJsonObject &json);
+
   signals:
-    void deviceConnected(const QString &deviceName);
-    void deviceDisconnected();
     void dataReceived(const QByteArray &data);           // Keep raw data signal
-    void powerDataReceived(const PowerData &powerData); // Add parsed data signal
+    void powerDataReceived(const PowerData &powerData); // Parsed data signal
+    void discoveryStatusChanged(const QString &message); // User-visible discovery progress
 
 private slots:
     void onDeviceDiscovered(const QBluetoothDeviceInfo &info);
@@ -44,21 +58,25 @@ private slots:
 private:
     void connectToDevice(const QBluetoothDeviceInfo &device);
     void cleanupController();
+    void cleanupControllerAsync();
     void setupService();
     void parseJsonAndEmitPowerData(const QByteArray &data);
-    static PowerData parseJsonToPowerData(const QJsonObject &json);
-    
+
     QBluetoothDeviceDiscoveryAgent *m_discoveryAgent;
     QLowEnergyController *m_controller;
     QLowEnergyService *m_service;
-    
+
     QBluetoothDeviceInfo m_targetDevice;
     QLowEnergyCharacteristic m_dataCharacteristic;
-    
+
     QTimer *m_scanTimer;
     QTimer *m_connectTimer;
+    QTimer *m_cleanupTimer;
+
+    mutable QMutex m_stateMutex;
     bool m_isConnected = false;
     bool m_isConnecting = false;
+    bool m_controllerConnected = false; // true once QLowEnergyController emits connected()
     int m_retryCount = 0;
     const int m_maxRetries = 3;
     
