@@ -2,56 +2,45 @@
 #define SERIALMANAGER_H
 
 #include "PowerData.h"
+#include "PowerDataSource.h"
+#include "SerialAdapter.h"
 
-#include <QObject>
 #include <QSerialPort>
 #include <QSerialPortInfo>
-#include <QTimer>
 
-enum SerialProtocol {
-    PLD20 = 1,
-    PLD28,
-    MWAKE1
-};
+#include <memory>
+#include <vector>
 
-class SerialManager : public QObject
-{
-    Q_OBJECT
+class SerialManager : public PowerDataSource {
+  Q_OBJECT
 
 public:
-    explicit SerialManager(QObject *parent = nullptr);
-    ~SerialManager() override;
-    
-    Q_INVOKABLE bool connectSerialDevice(const QSerialPortInfo &portInfo);
-    Q_INVOKABLE void disconnect();
+  explicit SerialManager(QObject *parent = nullptr);
+  ~SerialManager() override;
 
-signals:
-    void deviceConnected(const QString &deviceName);
-    void deviceDisconnected();
-    void dataReceived(PowerData data);
+  void start() override;
+  void stop() override;
+  [[nodiscard]] QString sourceName() const override;
+  [[nodiscard]] bool isConnected() const override;
+
+  Q_INVOKABLE bool connectSerialDevice(const QSerialPortInfo &portInfo);
+  Q_INVOKABLE void disconnect();
 
 public slots:
-    bool tryConnect(const QString &portName);
+  bool tryConnect(const QString &portName);
 
 private slots:
-    void onSerialDataReady();
-    void onSerialError(QSerialPort::SerialPortError error);
-    bool waitForLineAvailable(int timeoutMs);
+  void onSerialDataReady();
+  void onSerialError(QSerialPort::SerialPortError error);
 
-  private:
-    // must set m_protocol and return true on success
-    bool checkPLDProtocol();
-    // must set m_protocol and return true on success
-    bool checkMacwakeProtocol();
+private:
+  [[nodiscard]] bool tryAdapters();
 
-    QSerialPort *m_serialPort;
-    QByteArray m_readBuffer;
-    bool m_isConnected = false;
-    SerialProtocol m_protocol;
+  QSerialPort *m_serialPort;
+  bool m_isConnected = false;
 
-    // Known VID/PID for USB Power OSD devices
-    static const quint16 TARGET_VENDOR_ID;
-    static const quint16 TARGET_PRODUCT_ID;
+  std::vector<std::unique_ptr<SerialAdapter>> m_adapters;
+  SerialAdapter *m_currentAdapter = nullptr;
 };
 
 #endif // SERIALMANAGER_H

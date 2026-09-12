@@ -144,3 +144,49 @@ mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build . --config Release
 ```
+
+## Testing
+
+The project uses [Qt Test](https://doc.qt.io/qt-6/qtest.html) for unit tests. The test suite is built as the
+`usb-power-osd-tests` target and registered with CTest.
+
+### Running tests
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target usb-power-osd-tests
+ctest --test-dir build --output-on-failure
+```
+
+### Test areas
+
+The tests currently cover the core data-path logic without requiring hardware:
+
+- **V2 BLE protocol** — JSON payload parsing and binary packet parsing for the MacWake V2-BLE protocol.
+- **Serial PLD protocol** — PLD20/PLD28 line detection and voltage/current/power extraction.
+- **Measurement pipeline** — 30 Hz frame bucketing with max-aggregation, pause detection,
+  device-to-wall-clock timestamp normalization, and forward-fill of empty buckets.
+
+### Coverage (Clang/AppleClang only)
+
+To generate an HTML coverage report, enable the `USBPOWEROSD_ENABLE_COVERAGE` option and run the
+provided script:
+
+```bash
+scripts/generate_coverage.sh build-coverage build-coverage/coverage-html
+```
+
+This configures a fresh build with LLVM instrumentation, builds and runs the tests, then writes the
+report to `build-coverage/coverage-html/index.html`.
+
+You can also use the CMake convenience target:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DUSBPOWEROSD_ENABLE_COVERAGE=ON
+cmake --build build --target coverage
+```
+
+**Note:** On macOS, the AppleClang toolchain does not integrate with CLion's built-in coverage
+overlay. Use the generated HTML report or a Linux/gcov-based setup if you need IDE-integrated
+coverage highlighting.
+

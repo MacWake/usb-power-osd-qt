@@ -35,6 +35,7 @@ find_package(Qt6 REQUIRED COMPONENTS
         Bluetooth
         SerialPort
         Multimedia
+        Test
 )
 
 # Enable automoc for Qt
@@ -42,18 +43,105 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+# Optional LLVM/Clang coverage instrumentation for the test target.
+option(USBPOWEROSD_ENABLE_COVERAGE
+       "Build usb-power-osd-tests with LLVM coverage instrumentation (Clang/AppleClang only)" OFF)
+
+# Unit tests
+set(TEST_SOURCES
+        tests/main.cpp
+        tests/test_v2_ble_protocol.cpp
+        tests/test_v2_ble_protocol.h
+        tests/test_serial_pld_protocol.cpp
+        tests/test_serial_pld_protocol.h
+        tests/test_measurement_pipeline.cpp
+        tests/test_measurement_pipeline.h
+        tests/test_graph_mapping.cpp
+        tests/test_graph_mapping.h
+        tests/test_graph_cache.cpp
+        tests/test_graph_cache.h
+        tests/test_serial_to_graph.cpp
+        tests/test_serial_to_graph.h
+)
+
+set(TEST_LIB_SOURCES
+        src/BluetoothManager.cpp
+        src/BluetoothManager.h
+        src/CurrentGraph.cpp
+        src/CurrentGraph.h
+        src/GraphCache.cpp
+        src/GraphCache.h
+        src/MeasurementPipeline.cpp
+        src/MeasurementPipeline.h
+        src/OsdSettings.cpp
+        src/OsdSettings.h
+        src/PLDAdapter.cpp
+        src/PLDAdapter.h
+        src/PowerDelivery.cpp
+        src/PowerDelivery.h
+        src/PowerMonitor.cpp
+        src/PowerMonitor.h
+        src/SerialAdapter.cpp
+        src/SerialAdapter.h
+        src/SerialManager.cpp
+        src/SerialManager.h
+        src/PowerData.h
+        src/PowerDataSource.h
+)
+
+enable_testing()
+
+add_executable(usb-power-osd-tests ${TEST_SOURCES} ${TEST_LIB_SOURCES})
+target_link_libraries(usb-power-osd-tests PRIVATE
+        Qt6::Core
+        Qt6::Widgets
+        Qt6::Bluetooth
+        Qt6::SerialPort
+        Qt6::Multimedia
+        Qt6::Test
+)
+target_include_directories(usb-power-osd-tests PRIVATE src)
+add_test(NAME usb-power-osd-tests COMMAND usb-power-osd-tests)
+
+if(USBPOWEROSD_ENABLE_COVERAGE)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(usb-power-osd-tests PRIVATE
+                -fprofile-instr-generate
+                -fcoverage-mapping
+                -O0
+        )
+        target_link_options(usb-power-osd-tests PRIVATE
+                -fprofile-instr-generate
+        )
+        message(STATUS "LLVM coverage instrumentation enabled for usb-power-osd-tests")
+    else()
+        message(WARNING "USBPOWEROSD_ENABLE_COVERAGE is only supported with Clang/AppleClang; ignoring for ${CMAKE_CXX_COMPILER_ID}")
+    endif()
+endif()
+
+# Convenience target that runs the coverage report script.
+add_custom_target(coverage
+    COMMAND "${CMAKE_SOURCE_DIR}/scripts/generate_coverage.sh" "${CMAKE_BINARY_DIR}"
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    COMMENT "Generating HTML coverage report in ${CMAKE_BINARY_DIR}/coverage-html"
+)
+
 # Source files
 set(SOURCES
         src/BluetoothManager.cpp
         src/CurrentGraph.cpp
         src/DeviceManager.cpp
         src/DeviceSelectionDialog.cpp
+        src/GraphCache.cpp
         src/Main.cpp
         src/MainWindow.cpp
         src/MeasurementHistory.cpp
+        src/MeasurementPipeline.cpp
         src/OsdSettings.cpp
+        src/PLDAdapter.cpp
         src/PowerDelivery.cpp
         src/PowerMonitor.cpp
+        src/SerialAdapter.cpp
         src/SerialManager.cpp
         src/SettingsDialog.cpp
         src/AboutDialog.cpp
@@ -69,10 +157,12 @@ set(HEADERS
         src/DeviceSelectionDialog.h
         src/MainWindow.h
         src/MeasurementHistory.h
+        src/MeasurementPipeline.h
         src/OsdSettings.h
         src/PowerData.h
         src/PowerDelivery.h
         src/PowerMonitor.h
+        src/PowerDataSource.h
         src/SerialManager.h
         src/SettingsDialog.h
         src/AudioGenerator.h
@@ -81,6 +171,25 @@ set(HEADERS
 set(RESOURCES
         resources/resources.qrc
 )
+
+# Python is needed to convert the Markdown user manual to HTML
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+# Convert user manual Markdown to HTML at build time
+set(USER_MANUAL_MD "${CMAKE_SOURCE_DIR}/docs/USER_MANUAL.md")
+set(USER_MANUAL_HTML "${CMAKE_BINARY_DIR}/USER_MANUAL.html")
+set(USER_MANUAL_CONVERTER "${CMAKE_SOURCE_DIR}/docs/md2html.py")
+
+add_custom_command(
+    OUTPUT ${USER_MANUAL_HTML}
+    COMMAND ${CMAKE_COMMAND} -E echo "Converting user manual to HTML..."
+    COMMAND Python3::Interpreter ${USER_MANUAL_CONVERTER} ${USER_MANUAL_MD} ${USER_MANUAL_HTML}
+    DEPENDS ${USER_MANUAL_MD} ${USER_MANUAL_CONVERTER}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Building user manual HTML"
+)
+
+add_custom_target(user_manual_html ALL DEPENDS ${USER_MANUAL_HTML})
 
 qt_add_executable(usb-power-osd ${SOURCES} ${HEADERS} ${UI_FILES} ${RESOURCES})
 
@@ -160,7 +269,18 @@ if (WIN32)
     
     # Install MSVC runtime libraries to root directory (not bin)
     set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+
+    # Install user manual next to the executable on Windows
+    install(FILES ${USER_MANUAL_HTML}
+            DESTINATION .
+            RENAME USER_MANUAL.html
+    )
 elseif(APPLE)
+    # Copy the user manual into the app bundle resources
+    set_source_files_properties(${USER_MANUAL_HTML}
+        PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(usb-power-osd PRIVATE ${USER_MANUAL_HTML})
+
     install(TARGETS usb-power-osd
             BUNDLE DESTINATION .
     )
@@ -169,7 +289,7 @@ else()
     install(TARGETS usb-power-osd
             RUNTIME DESTINATION bin
     )
-    
+
     # Install desktop file
     if(EXISTS ${CMAKE_SOURCE_DIR}/usbc-power-osd.desktop)
         install(FILES ${CMAKE_SOURCE_DIR}/usbc-power-osd.desktop
@@ -177,11 +297,24 @@ else()
                 RENAME usb-power-osd.desktop
         )
     endif()
-    
+
     # Install icon
     if(EXISTS ${CMAKE_SOURCE_DIR}/usb-power-osd.png)
         install(FILES ${CMAKE_SOURCE_DIR}/usb-power-osd.png
                 DESTINATION share/icons/hicolor/256x256/apps
+        )
+    endif()
+
+    # Install user manual
+    install(FILES ${USER_MANUAL_HTML}
+            DESTINATION share/doc/usb-power-osd
+            RENAME USER_MANUAL.html
+    )
+
+    # Install desktop shortcut to open the user manual
+    if(EXISTS ${CMAKE_SOURCE_DIR}/usb-power-osd-manual.desktop)
+        install(FILES ${CMAKE_SOURCE_DIR}/usb-power-osd-manual.desktop
+                DESTINATION share/applications
         )
     endif()
 endif()
@@ -202,7 +335,12 @@ if (WIN32)
     set(CPACK_WIX_UPGRADE_GUID "12345678-90AB-CDEF-1234-567890ABCDEF")
     set(CPACK_PACKAGE_EXECUTABLES "USB-Power-OSD" "USB Power OSD")
     set(CPACK_WIX_PROGRAM_MENU_FOLDER "USB Power OSD")
-    
+
+    # The WiX 3.11 binary zip does not include darice.cub, which is required
+    # for MSI validation. Skip ICE validation so packaging works with the
+    # minimal binary distribution.
+    set(CPACK_WIX_LIGHT_EXTRA_FLAGS "-sval")
+
     # Configure WiX to use the executable's icon for shortcuts
     set(CPACK_WIX_PRODUCT_ICON "${CMAKE_CURRENT_SOURCE_DIR}/usbpower.ico")
     set(CPACK_WIX_UI_BANNER "${CMAKE_CURRENT_SOURCE_DIR}/usbpower.ico")
@@ -226,18 +364,20 @@ elseif(UNIX AND NOT APPLE)
     
     # DEB dependencies for Ubuntu/Debian
     if(LINUX_DISTRO STREQUAL "ubuntu-24.04")
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS 
-            "libqt6core6t64, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libqt6multimedia6, libgl1-mesa-glx | libgl1, libxkbcommon-x11-0"
+        # Ubuntu 24.04 renamed core/gui/widgets Qt6 packages to the t64 ABI suffix
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS
+            "libqt6core6t64, libqt6gui6t64, libqt6widgets6t64, libqt6serialport6, libqt6bluetooth6, libqt6multimedia6, libgl1, libxkbcommon-x11-0"
         )
     else()
-        # Default/Debian stable dependencies
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS 
-            "libqt6core6, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libqt6multimedia6, libgl1-mesa-glx | libgl1, libxkbcommon-x11-0"
+        # Debian 12 (Bookworm) and 13 (Trixie) keep the original Qt6 package names
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS
+            "libqt6core6, libqt6gui6, libqt6widgets6, libqt6serialport6, libqt6bluetooth6, libqt6multimedia6, libgl1, libxkbcommon-x11-0"
         )
     endif()
-    
-    # Enable automatic dependency detection as fallback
-    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+    # Do not mix automatic shlibdeps with the manually curated list above;
+    # it produces conflicting versioned dependencies on distros with ABI renames.
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS OFF)
     
     # RPM-specific settings
     set(CPACK_RPM_PACKAGE_NAME "usb-power-osd")
@@ -248,19 +388,20 @@ elseif(UNIX AND NOT APPLE)
     
     # RPM dependencies for Fedora/RHEL/openSUSE
     set(CPACK_RPM_PACKAGE_REQUIRES
-        "qt6-qtbase, qt6-qtserialport, qt6-qtconnectivity, qt6-qtmultimedia, mesa-libGL"
+        "qt6-qtbase-gui, qt6-qtbase-widgets, qt6-qtserialport, qt6-qtconnectivity, qt6-qtmultimedia, mesa-libGL"
     )
-    
-    # Enable automatic dependency detection
+
+    # Let rpm auto-detect soname deps as a safety net, but keep the explicit Qt6 list above.
     set(CPACK_RPM_PACKAGE_AUTOREQ ON)
     
-    # Package file names
+    # Package file names. Use per-generator versions so prereleases can use
+    # Debian-style tilde versions (e.g. 1.5.0~beta.1) for proper ordering.
     if(LINUX_DISTRO)
-        set(CPACK_DEBIAN_FILE_NAME "usb-power-osd_${PROJECT_VERSION}_${LINUX_DISTRO}_amd64.deb")
-        set(CPACK_RPM_FILE_NAME "usb-power-osd-${PROJECT_VERSION}-${LINUX_DISTRO}.x86_64.rpm")
+        set(CPACK_DEBIAN_FILE_NAME "usb-power-osd_${CPACK_DEBIAN_PACKAGE_VERSION}_${LINUX_DISTRO}_amd64.deb")
+        set(CPACK_RPM_FILE_NAME "usb-power-osd-${CPACK_RPM_PACKAGE_VERSION}-${LINUX_DISTRO}.x86_64.rpm")
     else()
-        set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")  # usb-power-osd_2.0.0_amd64.deb
-        set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")     # usb-power-osd-2.0.0.x86_64.rpm
+        set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
+        set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
     endif()
     
 endif()

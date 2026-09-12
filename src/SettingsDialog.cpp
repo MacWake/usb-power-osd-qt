@@ -93,6 +93,37 @@ void SettingsDialog::setupUI() // ReSharper disable once CppDFAMemoryLeak
         this->m_settings->min_current = static_cast<float>(value) / 1000.0f;
     });
 
+    m_graphPixelsPerSecond = new QSpinBox();
+    m_graphPixelsPerSecond->setRange(1, 99);
+    m_graphPixelsPerSecond->setSuffix(" px/s");
+    m_graphPixelsPerSecond->setValue(static_cast<int>(this->m_settings->graph_pixels_per_second));
+    osdLayout->addRow("Graph pixels per second:", m_graphPixelsPerSecond);
+    connect(m_graphPixelsPerSecond, QOverload<int>::of(&QSpinBox::valueChanged), [this](int value) {
+        this->m_settings->graph_pixels_per_second = static_cast<double>(value);
+    });
+
+    m_labelSampleWindow = new QSpinBox();
+    m_labelSampleWindow->setRange(1, 10);
+    m_labelSampleWindow->setValue(this->m_settings->label_sample_window);
+    osdLayout->addRow("Label sample window:", m_labelSampleWindow);
+    connect(m_labelSampleWindow, QOverload<int>::of(&QSpinBox::valueChanged), [this](int value) {
+        this->m_settings->label_sample_window = value;
+    });
+
+    m_graphLogScale = new QCheckBox("Logarithmic time scale");
+    m_graphLogScale->setChecked(this->m_settings->graph_log_scale);
+    osdLayout->addRow(m_graphLogScale);
+    connect(m_graphLogScale, &QCheckBox::toggled, [this](bool checked) {
+        this->m_settings->graph_log_scale = checked;
+    });
+
+    m_showGraphPeaks = new QCheckBox("Show graph peaks");
+    m_showGraphPeaks->setChecked(this->m_settings->show_graph_peaks);
+    osdLayout->addRow(m_showGraphPeaks);
+    connect(m_showGraphPeaks, &QCheckBox::toggled, [this](bool checked) {
+        this->m_settings->show_graph_peaks = checked;
+    });
+
     layout->addWidget(osdGroup);
 
     auto *colorGroup = new QGroupBox("Colors");
