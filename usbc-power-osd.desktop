@@ -4,6 +4,6 @@ Type=Application
 Name=USB-C Power OSD
 Comment=On Screen Display for USB-C power meter
 Exec=/usr/bin/USB-Power-OSD
-Icon=usbpower
+Icon=usb-power-osd
 Categories=Utility;
 StartupNotify=true
