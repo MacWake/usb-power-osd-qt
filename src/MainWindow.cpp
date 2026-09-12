@@ -78,7 +78,9 @@ MainWindow::MainWindow(OsdSettings *settings,
     // }
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow() {
+    delete m_history;
+}
 
 void MainWindow::startReconnectTimer() const { this->m_reconnect_timer->start(); }
 
